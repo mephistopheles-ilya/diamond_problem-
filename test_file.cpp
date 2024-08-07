@@ -29,7 +29,7 @@ TEST(test1, try_something) {
 TEST(test2, try_something) {
     auto f = []<typename T, typename U> (T x, U y)
         requires Addable<T, U> { return x + y; };
-    int res = f(2, 3);
-    EXPECT_EQ(res, 5);
+    int res = f(3, 3);
+    EXPECT_EQ(res, 6);
     std::cout << std::endl << boost::typeindex::type_id_with_cvr<decltype(f)>().pretty_name();
 }
