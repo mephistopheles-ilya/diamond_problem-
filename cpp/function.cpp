@@ -25,55 +25,68 @@ Point rotate(Point p, double angle) {
     return Point(res(0), res(1));
 }
 
-void grind(std::vector<Point>& v, Point point_1, Point point_2) {
-    double dist = boost::geometry::distance(point_1, point_2);
-    double u_dist = dist / (POINTS_BETWEEN + 1);
-    Point u_vec = (point_2 - point_1) / dist;
-    for(int i : std::views::iota(1, POINTS_BETWEEN + 1)) {
-       v.push_back(point_1 + i * u_vec * u_dist);
-    }
-}
 
-
-void read_points_in_vector(std::vector<Point>& v, std::ifstream& in) {
+void read_points_in_contour(boost::geometry::model::linestring<Point>& in_contour, std::ifstream& in) {
     std::istream_iterator<Point> ii(in);
     Point point_1 = *ii;
-    v.push_back(point_1);
+    in_contour.push_back(point_1);
     ++ii;
 
     for(Point point_2; ii != std::istream_iterator<Point>{}; ++ii) {
         point_2 = *ii;
-        grind(v, point_1, point_2);
-        v.push_back(point_2);
+        double dist = boost::geometry::distance(point_1, point_2);
+        if (dist >= EPSILON) {
+        	in_contour.push_back(point_2);
+        }
         point_1 = point_2;
     }
 }
 
+void create_small_shifts(boost::geometry::model::polygon<Point, false, true, std::vector>& pol) {
+    auto& vec_of_points = pol.outer();
+    std::random_device rd;  
+    std::mt19937 gen(rd()); 
+    std::uniform_real_distribution<> dis(-DISTANCE_BETWEEN_POINTS / 20, DISTANCE_BETWEEN_POINTS / 20);
+    size_t end = vec_of_points.size() - 1;
+    for(size_t i = 1; i < end; ++i) {
+        Point direction = vec_of_points[i] - vec_of_points[i + 1];
+        direction = Point(direction.y, -direction.x);
+        direction = direction / boost::geometry::distance(vec_of_points[i], vec_of_points[i + 1]);
+        direction = direction * dis(gen);
+        vec_of_points[i] = vec_of_points[i] + direction;
+    }
+}
+
+
 void spoil_and_get_protrusions(std::vector<Point>& v
-        , std::vector<boost::geometry::model::polygon<Point, false, true, std::vector>>& vec_of_pol) {
+        , std::vector<boost::geometry::model::polygon<Point, false, true, std::vector>>& vec_of_pol
+        , std::vector<bool>& mask) {
     std::random_device rd;  
     std::mt19937 gen(rd()); 
     std::uniform_real_distribution<> dis1(-boost::math::constants::pi<double>()/16
             , boost::math::constants::pi<double>()/16);
-    std::uniform_real_distribution<> dis2(0.03, 0.15);
+    std::uniform_real_distribution<> dis_small(DISTANCE_BETWEEN_POINTS / 2, DISTANCE_BETWEEN_POINTS);
+    std::uniform_real_distribution<> dis_bigger(DISTANCE_BETWEEN_POINTS, DISTANCE_BETWEEN_POINTS * 2);
 
     boost::geometry::model::polygon<Point, false, true, std::vector> poly_of_spoiled_points;
 
-    int flag = -1, step = 5;
-    size_t j = 0, end = v.size() - 1;
+    int flag = -1, step = 8;
+    size_t j = 0, end = v.size() - 20;
     srand(time(NULL));
 
     for(size_t i = 1; i < end; ++i) {
-        if ((i % 40) == 1 && (i + step < end)) {
+        if ((i % 97) == 30 && (i + step < end)) {
             flag = (rand()%2) ? -1 : 1;
+            if (flag == 1) mask.push_back(1);
+            else mask.push_back(0);
             size_t index = i - 1;
             poly_of_spoiled_points.outer().push_back(v[i - 1]);
             for(j = i; j < (i + step); ++j) {
                 Point direction = v[j] - v[j + 1];
                 direction = Point(direction.y, -direction.x) * flag;
                 direction = direction / boost::geometry::distance(v[j], v[j + 1]);
-                direction = rotate(direction, dis1(gen));
-                Point vec = direction * dis2(gen);
+                //direction = rotate(direction, dis1(gen));
+                Point vec = direction * (((j - i) < 3 /*|| (j - i) > 5*/ ) ? dis_small(gen) : dis_bigger(gen));
                 v[j] = v[j] + vec;
                 poly_of_spoiled_points.outer().push_back(v[j]);
             }
@@ -87,8 +100,8 @@ void spoil_and_get_protrusions(std::vector<Point>& v
 }
 
 
-std::pair<double, double> write_intersection(std::vector<boost::geometry::model::polygon<Point>>& dif
-        , std::ofstream& out_intersection) {
+std::pair<double, double> write_intersection(std::vector<boost::geometry::model::polygon
+        <Point, false, true, std::vector>>& dif, std::ofstream& out_intersection) {
     double dif_area = 0, dif_perimetr = 0;
     for(auto& pol : dif) {
         std::ranges::copy(pol.outer(), std::ostream_iterator<Point>(out_intersection, "\n"));

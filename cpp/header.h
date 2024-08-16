@@ -21,7 +21,8 @@
 #include <boost/geometry/geometries/geometries.hpp>
 
 
-inline constexpr int POINTS_BETWEEN = 30;
+inline constexpr double DISTANCE_BETWEEN_POINTS = 0.008;
+inline constexpr double EPSILON = 0.000000001;
 
 struct Point {
     double x = 0, y = 0;
@@ -62,11 +63,11 @@ std::ostream& operator << (std::ostream& os, const Point& p);
 BOOST_GEOMETRY_REGISTER_POINT_2D(Point, double, boost::geometry::cs::cartesian, x, y)
 
 Point rotate(Point p, double angle);
-void grind(std::vector<Point>& v, Point point_1, Point point_2);
-void read_points_in_vector(std::vector<Point>& v, std::ifstream& in);
-void spoil_and_get_protrusions(std::vector<Point>& v, std::vector<boost::geometry::model::polygon<Point, false, true, std::vector>>& vec_of_pol); 
-std::pair<double, double> write_intersection(std::vector<boost::geometry::model::polygon<Point>>& dif
-        , std::ofstream& out_intersection); 
+void read_points_in_contour(boost::geometry::model::linestring<Point>& in_contour, std::ifstream& in);
+void spoil_and_get_protrusions(std::vector<Point>& v, std::vector<boost::geometry::model::polygon<Point, false, true, std::vector>>& vec_of_pol, std::vector<bool>& mask); 
+std::pair<double, double> write_intersection(std::vector<boost::geometry::model::polygon
+        <Point, false, true, std::vector>>& dif, std::ofstream& out_intersection);
+void create_small_shifts(boost::geometry::model::polygon<Point, false, true, std::vector>& pol);
 
 
 
