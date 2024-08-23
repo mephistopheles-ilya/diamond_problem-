@@ -1,0 +1,52 @@
+# make OUT_O_DIR=debug CC=clang CFLAGS="-g -O0" -f makefile.v3.mak
+# make -f makefile.v3.mak
+# touch include/cache.h
+# make -f makefile.v3.mak
+# make OUT_O_DIR=debug -f makefile.v3.mak
+# make -f makefile.v3.mak testrun
+# make -f makefile.v3.mak testrun -j4
+# make OUT_O_DIR=debug -f makefile.v3.mak testrun -j4
+# make OUT_O_DIR=debug -f makefile.v3.mak clean
+# make -f makefile.v3.mak clean
+
+ifeq ($(origin CXX),default)
+  CXX = g++-11
+endif
+
+CXXFLAGS ?= -O2 -std=c++20 -Wall -Wextra -Wpedantic -DBOOST_ALLOW_DEPRECATED_HEADERS 
+OUT_O_DIR ?= build
+SRC = ./source
+ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+
+CSRC = main.cpp geom.cpp points.cpp
+
+# reproducing source tree in object tree
+COBJ := $(addprefix $(OUT_O_DIR)/,$(CSRC:.cpp=.o))
+DEPS = $(COBJ:.o=.d)
+
+.PHONY: all
+all: $(OUT_O_DIR)/a.out
+
+$(OUT_O_DIR)/a.out: $(COBJ)
+	$(CXX) $^ -o $@ $(LDFLAGS)
+
+# static pattern rule to not redefine generic one
+$(COBJ) : $(OUT_O_DIR)/%.o : %.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(DEPS) : $(OUT_O_DIR)/%.d : %.cpp
+	@mkdir -p $(@D)
+	$(CXX) -E $(CXXFLAGS) $< -MM -MT $(@:.d=.o) > $@
+
+
+.PHONY: clean
+clean:
+	rm -rf $(COBJ) $(DEPS) $(OUT_O_DIR)/*.x $(OUT_O_DIR)/*.log
+
+# targets which we have no need to recollect deps
+NODEPS = clean
+
+ifeq (0, $(words $(findstring $(MAKECMDGOALS), $(NODEPS))))
+include $(DEPS)
+endif
