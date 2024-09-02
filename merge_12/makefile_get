@@ -1,0 +1,28 @@
+# make CXX=clang CXXFLAGS="-g -O0" -f makefile.v2.mak
+# make -f makefile.v2.mak clean
+# make -f makefile.v2.mak
+
+ifeq ($(origin CXX),default)
+  CXX = g++-12
+endif
+
+CXXFLAGS ?= -std=c++20 -O2 -Wall -Wextra -Wpedantic -DBOOST_ALLOW_DEPRECATED_HEADERS  
+LDFLAGS ?= -lboost_program_options
+
+CSRC = get_contour.cpp source/edge.cpp source/point2d.cpp source/point3d.cpp \
+source/rw_functions.cpp source/segment2d.cpp source/geom_functions.cpp
+COBJ = get_contour.o edge.o point2d.o point3d.o rw_functions.o segment2d.o geom_functions.o
+
+%.o : source/%.cpp
+	$(CXX) $(CXXFLAGS) -c $^ -o $@
+
+.PHONY: all
+all: get
+
+get: $(COBJ)
+	$(CXX) $^ -o $@ $(LDFLAGS)
+
+
+.PHONY: clean
+clean:
+	rm -rf *.o
