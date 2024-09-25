@@ -33,7 +33,7 @@ std::tuple<int, int, int> read_structures_from_file(std::istream& in
         std::getline(in, line);
         std::cout << line << std::endl;
     }
-
+#if 0
     for (int i = 0; i < num_facets; ++i) {
         Point3D point;
         std::getline(in, line);
@@ -44,17 +44,39 @@ std::tuple<int, int, int> read_structures_from_file(std::istream& in
         arr_norm3d.push_back(point);
         std::getline(in, line);
     }
+#endif
+    for (int i = 0; i < num_facets; ++i) {
+        Point3D point;
+        std::getline(in, line);
+        std::getline(in, line);
+        std::istringstream iss(line);
+        iss >> point.x >> point.y >> point.z;
+        arr_norm3d.push_back(point);
+    }
+
+
+
 
     for(int i = 0; i < 2; ++i) {
         std::getline(in, line);
         std::cout << line << std::endl;
     }
-
+#if 0
     for(int i = 0; i < num_edges; ++i) {
         Edge ed;
         std::getline(in, line);
         std::istringstream iss(line);
         iss >> ed.vert1_id >> ed.vert2_id >> ed.facet1_id >> ed.facet2_id;
+        arr_edges3d.push_back(ed);
+    }
+#endif
+    for(int i = 0; i < num_edges; ++i) {
+        Edge ed;
+        std::getline(in, line);
+        std::istringstream iss(line);
+        double ignore;
+        iss >> ignore;
+        iss >> ed.facet1_id >> ed.facet2_id >> ed.vert1_id >> ed.vert2_id;
         arr_edges3d.push_back(ed);
     }
 

@@ -4,6 +4,11 @@
 #include "../include/segment2d.h"
 #include "../include/edge.h"
 
+#include <boost/geometry/algorithms/correct.hpp>
+#include <boost/geometry/algorithms/detail/distance/interface.hpp>
+#include <boost/geometry/geometries/polygon.hpp>
+#include <ctime>
+#include <iterator>
 #include <random>
 
 void uniform_grid_intersection(boost::geometry::model::linestring<Point2D>& line
@@ -263,7 +268,6 @@ void projection_square_complexity(std::vector<Point3D>& arr_points3d
             double sin_a_b = sin_a * cos_b - sin_b * cos_a;
             return Point2D(length * sin_a_b, p.z);
         }; 
-
         if (dot_prod1 * dot_prod2 < 0) {
             Point2D proj1 = func(p1);
             Point2D proj2 = func(p2);
@@ -289,10 +293,11 @@ void projection_square_complexity(std::vector<Point3D>& arr_points3d
         }
         arr_segments2d.push_back(seg);
     }
-                
+
     size_t all_points = arr_segments2d.size();
     Segment2D* current_seg = &arr_segments2d[0];
     hull.outer().push_back(current_seg -> p1);
+    Point2D f_point = current_seg -> p1;
     Point2D start_point = current_seg -> p2;
     for(size_t i = 0; i < all_points; ++i) {
        for(auto& seg : arr_segments2d){
@@ -300,18 +305,28 @@ void projection_square_complexity(std::vector<Point3D>& arr_points3d
                    && (current_seg != &seg)) {
                start_point = seg.p2;
                hull.outer().push_back(seg.p1);
+              if(boost::geometry::distance(seg.p1, f_point) < EPSILON && i > all_points/2) {
+                   i = all_points;
+                   break;
+               }
                current_seg = &seg;
                break;
            }else if((boost::geometry::distance(seg.p2, start_point) < EPSILON) 
                    && (current_seg != &seg)) {
                start_point = seg.p1;
                hull.outer().push_back(seg.p2);  
+               if(boost::geometry::distance(seg.p2, f_point) < EPSILON && i > all_points/2) {
+                   i = all_points;
+                   break;
+               }
                current_seg = &seg;
                break;
            }
        }
     }
 }
+
+
 
 void hash_combine(size_t& seed, size_t hash_value) {
     seed ^= hash_value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
@@ -398,8 +413,52 @@ void projection_graph(std::vector<Point3D>& arr_points3d
 
     std::vector<std::vector<Point2D>> polygons;
     restore_polygons(arr_segments2d, polygons);
-    std::cout << polygons.size() << ' ' << polygons[0].size() << std::endl;
-    std::ranges::copy(polygons[0], std::back_inserter(hull.outer()));
+    size_t pol_index = 0;
+    size_t max_sz = polygons[0].size();
+    for(size_t i = 0; i < polygons.size(); ++i) {
+        if(polygons[i].size() > max_sz) {
+            max_sz = polygons[i].size();
+            pol_index = i;
+        }
+    }
+    std::cout << "PolygonS : " << polygons.size() << " Pol : " << 
+        polygons[pol_index].size() << std::endl;
+   // std::ranges::copy(polygons[0], std::back_inserter(hull.outer()));
+
+#if 1
+    boost::geometry::model::polygon<Point2D, false, true, std::vector> tmp_hull;
+    std::ranges::copy(polygons[pol_index], std::back_inserter(tmp_hull.outer()));
+    boost::geometry::correct(tmp_hull);
+
+    std::vector<Segment2D> segs;
+    //TODO initial segment must not have any intersections
+    Point2D first_point = tmp_hull.outer()[0];
+    for(size_t i = 1; i < tmp_hull.outer().size(); ++i) {
+        Segment2D seg = Segment2D(first_point, tmp_hull.outer()[i]);
+        segs.push_back(seg);
+        first_point = tmp_hull.outer()[i];
+    }
+
+    size_t i, j;
+    for(i = 0; i < segs.size(); ++i) {
+        for(j = i; j < segs.size(); ++j) {
+            if (i != j && i != (j - 1) && i != (j + 1)) {
+                auto [flag, point_of_intersect] = segs[i].intersect(segs[j]);
+                if(flag) {
+                    std::cout << "intersects  ";
+                    hull.outer().push_back(segs[i].p1);
+                    hull.outer().push_back(point_of_intersect);
+                    hull.outer().push_back(segs[j].p2);
+                    i = j;
+                    break;
+                }
+            }
+        }
+        if(j == segs.size()) {
+            hull.outer().push_back(segs[i].p1);
+        }
+    }
+#endif
 }
 
 

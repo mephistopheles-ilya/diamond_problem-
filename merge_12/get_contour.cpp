@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <numbers>
 #include <cmath>
 
@@ -74,9 +75,10 @@ int main(int argc, char* argv[]) {
 
 //CHECK IF PROJECTION IS VALID
         boost::geometry::correct(hull);
+        std::cout << "Hull size : " << hull.outer().size() << std::endl;
         std::string message;
-        if(!boost::geometry::is_valid(hull)) {
-            std::cerr << "convex hull is Not valid " << message;
+        if(!boost::geometry::is_valid(hull, message)) {
+            std::cerr << "convex hull is Not valid " << message << std::endl;
         }
 
 //TRYING TO DELETE EXTRA PART IN THE BOTTOM
@@ -94,7 +96,6 @@ int main(int argc, char* argv[]) {
                break;
             }
         } 
-
 
         std::string file = std::string("init_examples/contour_") + std::to_string(step);
         std::ofstream print_res(file);
