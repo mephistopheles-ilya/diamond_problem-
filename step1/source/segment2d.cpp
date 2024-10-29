@@ -1,5 +1,5 @@
-#include "../include/segment2d.h"
-#include "../include/geom_functions.h"
+#include "../include/segment2d.hpp"
+#include "../include/geom_functions.hpp"
 #include <boost/geometry/algorithms/detail/distance/interface.hpp>
 #include <utility>
 

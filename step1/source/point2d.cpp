@@ -1,5 +1,5 @@
-#include "../include/point2d.h"
-#include "../include/geom_functions.h"
+#include "../include/point2d.hpp"
+#include "../include/geom_functions.hpp"
 
 Point2D operator + (const Point2D& left, const Point2D& right) noexcept {
     return Point2D(left.x + right.x, left.y + right.y);

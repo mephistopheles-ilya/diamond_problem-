@@ -1,4 +1,4 @@
-#include "../include/point3d.h"
+#include "../include/point3d.hpp"
 
 Point3D operator + (const Point3D& left, const Point3D& right) noexcept {
     return Point3D(left.x + right.x, left.y + right.y, left.z + right.z);

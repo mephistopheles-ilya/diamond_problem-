@@ -1,8 +1,8 @@
 #pragma once
 
-#include "point3d.h"
-#include "point2d.h"
-#include "edge.h"
+#include "point3d.hpp"
+#include "point2d.hpp"
+#include "edge.hpp"
 
 #include <tuple>
 #include <vector>

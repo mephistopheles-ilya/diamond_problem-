@@ -1,9 +1,9 @@
 #pragma once 
 
-#include "point2d.h"
-#include "point3d.h"
-#include "edge.h"
-#include "segment2d.h"
+#include "point2d.hpp"
+#include "point3d.hpp"
+#include "edge.hpp"
+#include "segment2d.hpp"
 
 #include <boost/geometry.hpp>
 #include <boost/geometry/geometries/register/point.hpp>

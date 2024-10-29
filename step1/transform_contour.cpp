@@ -1,6 +1,6 @@
-#include "include/point2d.h"
-#include "include/geom_functions.h"
-#include "include/rw_functions.h"
+#include "include/point2d.hpp"
+#include "include/geom_functions.hpp"
+#include "include/rw_functions.hpp"
 
 #include <algorithm>
 #include <boost/geometry/iterators/ever_circling_iterator.hpp>

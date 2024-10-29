@@ -1,8 +1,8 @@
-#include "../include/geom_functions.h"
-#include "../include/point2d.h"
-#include "../include/point3d.h"
-#include "../include/segment2d.h"
-#include "../include/edge.h"
+#include "../include/geom_functions.hpp"
+#include "../include/point2d.hpp"
+#include "../include/point3d.hpp"
+#include "../include/segment2d.hpp"
+#include "../include/edge.hpp"
 
 #include <boost/geometry/algorithms/correct.hpp>
 #include <boost/geometry/algorithms/detail/distance/interface.hpp>

@@ -1,5 +1,5 @@
-#include "../include/rw_functions.h"
-#include "../include/geom_functions.h"
+#include "../include/rw_functions.hpp"
+#include "../include/geom_functions.hpp"
 
 #include <algorithm>
 #include <sstream>

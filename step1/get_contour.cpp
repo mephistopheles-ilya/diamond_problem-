@@ -1,8 +1,8 @@
-#include "include/point2d.h"
-#include "include/point3d.h"
-#include "include/edge.h"
-#include "include/rw_functions.h"
-#include "include/geom_functions.h"
+#include "include/point2d.hpp"
+#include "include/point3d.hpp"
+#include "include/edge.hpp"
+#include "include/rw_functions.hpp"
+#include "include/geom_functions.hpp"
 
 #include <fstream>
 #include <iomanip>
