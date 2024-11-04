@@ -53,7 +53,7 @@ int main(int argc, char* argv[]) {
     std::vector<Point3D> arr_points3d;
     std::vector<Point3D> arr_norm3d;
     std::vector<Edge> arr_edges3d;
-    auto [num_vertices, num_facest, num_edges] = read_structures_from_file(in
+    auto [num_vertices, num_facest, num_edges] = read_spoil_structures_from_file(in
             , arr_points3d, arr_norm3d, arr_edges3d); 
     std::cout << "num_vertices = " << num_vertices << ' ' << arr_points3d.size() << '\n';
     std::cout << "num_facest = " << num_facest << ' ' << arr_norm3d.size() << '\n';

@@ -63,6 +63,7 @@ public:
     friend Point3D operator * (const Point3D& left, double right) noexcept;
     friend Point3D operator * (double left, const Point3D& right) noexcept;
     friend Point3D operator / (const Point3D& left, double right) noexcept;
+    friend bool operator == (const Point3D& left, const Point3D& right) noexcept;
     friend std::istream& operator >> (std::istream& is, Point3D& p);
     friend std::ostream& operator << (std::ostream& os, const Point3D& p);
 };

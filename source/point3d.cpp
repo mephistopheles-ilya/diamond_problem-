@@ -1,4 +1,5 @@
 #include "../include/point3d.hpp"
+#include "../include/geom_functions.hpp"
 
 Point3D operator + (const Point3D& left, const Point3D& right) noexcept {
     return Point3D(left.x + right.x, left.y + right.y, left.z + right.z);
@@ -18,6 +19,9 @@ Point3D operator * (double left, const Point3D& right) noexcept {
 
 Point3D operator / (const Point3D& left, double right) noexcept {
     return Point3D(left.x / right, left.y / right, left.z / right);
+}
+bool operator == (const Point3D& left, const Point3D& right) noexcept {
+    return boost::geometry::distance(left, right) < EPSILON;
 }
 
 std::istream& operator >> (std::istream& is, Point3D& p) {
