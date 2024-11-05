@@ -8,6 +8,7 @@
 #include <vector>
 #include <fstream>
 #include <algorithm>
+#include <ranges>
 #include <boost/geometry/geometries/polygon.hpp> 
 
 
@@ -17,8 +18,8 @@
 using Polygon_2 = boost::geometry::model::polygon<Point2D, false, true, std::vector>;
  
 int main(int argc, char* argv[]) {
-    if (argc != 3) {
-        std::cout << "First and second arguments are file\n";
+    if (argc != 4) {
+        std::cout << "First and second arguments are file, third is debug\n";
         return 0;
     }
     std::ifstream in1(argv[1]);
@@ -44,10 +45,14 @@ int main(int argc, char* argv[]) {
     boost::geometry::sym_difference(poly1, poly2, polys);
     std::cout << "amount of polygons : " << polys.size() << std::endl;
     double area = 0;
+    std::ofstream of(argv[3]);
     for(auto& pol: polys) {
         //for(auto it = pol.outer().begin(); it != pol.outer().end(); ++it) {
         //    std::cout << *it << std::endl;
         //}
+        std::ranges::copy(pol.outer(), std::ostream_iterator<Point2D>(of, "\n"));
+        of << *(pol.outer().begin());
+        of << std::endl << std::endl;
         area += boost::geometry::area(pol);
         //std::cout << std::endl << std::endl;
     }
