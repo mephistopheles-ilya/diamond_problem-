@@ -103,7 +103,7 @@ int main (int argc, char* argv[]) {
     of1 << "endsolid"<<std::endl;
 #endif
 
-#if 0
+#if 1
     for(auto it = chull.facets_begin(); it != chull.facets_end(); ++it) {
         auto v = it->facet_begin();
         for(int i = 0; i < it->size(); ++i) {
@@ -124,13 +124,6 @@ int main (int argc, char* argv[]) {
         if (counter == 10) break;
     }
 #endif
-
-    int counter = 0;
-    for(auto it = chull.planes_begin(); it != chull.planes_end(); ++it) {
-        std::cout << it->a() << ' ' << it->b() << ' ' << it->c() << ' ' << it->d() << std::endl;
-        ++counter;
-        if (counter == 10) break;
-    }
 
 
     return 0;

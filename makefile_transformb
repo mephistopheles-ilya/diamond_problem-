@@ -8,10 +8,20 @@ ifeq ($(origin CXX),default)
   CXX = g++-12
 endif
 
-CXXFLAGS ?= -std=c++20 -O0 -g -Wall -Wextra -Wpedantic -DBOOST_ALLOW_DEPRECATED_HEADERS\
-			-fsanitize=leak,undefined,address
-LDFLAGS ?= -lboost_program_options -fsanitize=leak,undefined,address
-OUT_O_DIR ?= build
+LDFLAGS ?= -lboost_program_options -fsanitize=leak,undefined,address -lgmp
+
+ifeq ($(OPTIMIZATION), none)
+  CXXFLAGS ?= -std=c++20 -O0 -g -Wall -Wextra -Wpedantic -DBOOST_ALLOW_DEPRECATED_HEADERS \
+              -fsanitize=leak,undefined,address
+  OUT_O_DIR ?= build_debug
+else ifeq ($(OPTIMIZATION), debug)
+  CXXFLAGS ?= -std=c++20 -O0 -g -Wall -Wextra -Wpedantic -DBOOST_ALLOW_DEPRECATED_HEADERS \
+              -fsanitize=leak,undefined,address
+  OUT_O_DIR ?= build_debug
+else ifeq ($(OPTIMIZATION), release)
+  CXXFLAGS ?= -std=c++20 -O3 -DNDEBUG -Wall -Wextra -Wpedantic -DBOOST_ALLOW_DEPRECATED_HEADERS
+  OUT_O_DIR ?= build_release
+endif
 
 SOURCES = transform_contour.cpp $(wildcard source/*.cpp)
 OBJECTS = $(addprefix $(OUT_O_DIR)/,$(SOURCES:.cpp=.o))

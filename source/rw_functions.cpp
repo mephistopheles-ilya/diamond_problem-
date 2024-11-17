@@ -43,7 +43,7 @@ std::tuple<double, double, double> compute_plane_equation(const Polyhedron_3::Fa
 
 std::tuple<int, int, int> read_spoil_structures_from_file(std::istream& in
         , std::vector<Point3D>& arr_points3d, std::vector<Point3D>& arr_norm3d
-        , std::vector<Edge>& arr_edges3d) {
+        , std::vector<Edge>& arr_edges3d, double parametr_of_changing) {
 
 
     std::list<Plane> planes;
@@ -92,7 +92,7 @@ std::tuple<int, int, int> read_spoil_structures_from_file(std::istream& in
         int unused1, unused2;
         sscanf(line.c_str(), "%d %d %lf %lf %lf %lf", &unused1, &unused2, &a, &b, &c, &d);
         if (c > 0) {
-            typename K::Plane_3 plane(a, b, c, d + 0.5);
+            typename K::Plane_3 plane(a, b, c, d + parametr_of_changing);
             planes.push_back(plane);
         } else {
             typename K::Plane_3 plane(a, b, c, d);

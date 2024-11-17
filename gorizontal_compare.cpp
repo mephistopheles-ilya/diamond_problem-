@@ -6,7 +6,6 @@
 #include <cmath>
 #include <vector>
 #include <algorithm>
-#include <ranges>
 
 #include "include/point2d.hpp"
 #include "include/segment2d.hpp"
@@ -122,26 +121,32 @@ double compare_contours(line_string& points, line_string& polyline, std::vector<
 }
 
 int main(int argc, char* argv[]) {
-    if(argc != 4) {
-        std::cout << "Usage <point contour> <point or polyline contour> <debug>" << std::endl;
+    if (argc != 4) {
+        std::cout << "Usage <directory1> <directory2> <amount_of_files>\n";
         return -1;
     }
-    std::ifstream in1(argv[1]);
-    std::ifstream in2(argv[2]);
-    std::istream_iterator<Point2D> it1(in1);
-    std::istream_iterator<Point2D> it2(in2);
+    int amount_of_files = 0;
+    if (sscanf(argv[3], "%d", &amount_of_files) != 1) {
+        std::cout << "Wrong amount of files" << std::endl;
+        return -1;
+    }
+    for(int i = 0; i <= amount_of_files; ++i) {
+        std::string contour1 = std::string(argv[1]) + std::string("/contour_") + std::to_string(i);
+        std::string contour2 = std::string(argv[2]) + std::string("/contour_") + std::to_string(i);
+        std::ifstream in1(contour1);
+        std::ifstream in2(contour2);
+        std::istream_iterator<Point2D> it1(in1);
+        std::istream_iterator<Point2D> it2(in2);
 
-    line_string line1(it1, std::istream_iterator<Point2D>{});
-    line_string line2(it2, std::istream_iterator<Point2D>{});
-    assert(("No points in file1", line1.size() > 3));
-    assert(("No points in file2", line2.size() > 3));
+        line_string line1(it1, std::istream_iterator<Point2D>{});
+        line_string line2(it2, std::istream_iterator<Point2D>{});
+        assert(("No points in file1", line1.size() > 3));
+        assert(("No points in file2", line2.size() > 3));
 
-    std::vector<Segment2D> segs;
-    double error = compare_contours(line1, line2, segs);
-    std::cout << error << std::endl;
-
-    std::ofstream of(argv[3]);
-    std::ranges::copy(segs, std::ostream_iterator<Segment2D>(of, "\n\n")); 
+        std::vector<Segment2D> segs;
+        double error = compare_contours(line1, line2, segs);
+        std::cout << error << std::endl;
+    }
     return 0;
 }
 

@@ -18,6 +18,9 @@ int main(int argc, char* argv[]) {
     int projections;
     std::string file;
     std::string projection_method;
+    std::string shift_poly3d;
+    double parametr_of_changing;
+    std::string directory;
     boost::program_options::options_description desc("All options");
     desc.add_options()
         ("projections", boost::program_options::value<int>(&projections) -> default_value(30)
@@ -26,6 +29,12 @@ int main(int argc, char* argv[]) {
          -> default_value("InitialModel"), "file with initial model")
         ("pr_method", boost::program_options::value<std::string>(&projection_method)
          -> default_value("hull"), "method to make projection : hull, obvious, graph")
+        ("shift_poly3d", boost::program_options::value<std::string>(&shift_poly3d)
+         -> default_value("points"), "get initial polyhedron from points or from facets equatios: points or equatinos")
+        ("change", boost::program_options::value<double>( &parametr_of_changing)
+         -> default_value(0.001), "shift facets equasions")
+        ("directory", boost::program_options::value<std::string>(&directory)
+         -> default_value("init_examples"), "deroctory to restore files")
         ("help", "produce help message")
         ;
     boost::program_options::variables_map vm;
@@ -40,6 +49,7 @@ int main(int argc, char* argv[]) {
     std::cout << "projections = " << projections << '\n';
     std::cout << "file = " << file << '\n';
     std::cout << "method = " << projection_method << std::endl;
+    std::cout << "polyhedron = " << shift_poly3d << std::endl;
 
 
     std::ifstream in(file);
@@ -53,8 +63,14 @@ int main(int argc, char* argv[]) {
     std::vector<Point3D> arr_points3d;
     std::vector<Point3D> arr_norm3d;
     std::vector<Edge> arr_edges3d;
-    auto [num_vertices, num_facest, num_edges] = read_spoil_structures_from_file(in
-            , arr_points3d, arr_norm3d, arr_edges3d); 
+    int num_vertices = 0, num_facest = 0, num_edges = 0;
+    if (shift_poly3d == "points") {
+        std::tie(num_vertices, num_facest, num_edges) = read_structures_from_file(in
+                , arr_points3d, arr_norm3d, arr_edges3d);
+    } else {
+        std::tie(num_vertices, num_facest, num_edges)  = read_spoil_structures_from_file(in
+            , arr_points3d, arr_norm3d, arr_edges3d, parametr_of_changing); 
+    }
     std::cout << "num_vertices = " << num_vertices << ' ' << arr_points3d.size() << '\n';
     std::cout << "num_facest = " << num_facest << ' ' << arr_norm3d.size() << '\n';
     std::cout << "num_edges = " << num_edges << ' ' << arr_edges3d.size() <<  std::endl;
@@ -95,7 +111,7 @@ int main(int argc, char* argv[]) {
             }
         } 
 
-        std::string file = std::string("init_examples/contour_") + std::to_string(step);
+        std::string file = directory + std::string("/contour_") + std::to_string(step);
         std::ofstream print_res(file);
         if (!print_res.is_open()) {
             std::cerr << "problem with opening : " << file << std::endl;

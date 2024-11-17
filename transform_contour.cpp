@@ -1,8 +1,9 @@
-#include "include/point2d.h"
-#include "include/geom_functions.h"
-#include "include/rw_functions.h"
+#include "include/point2d.hpp"
+#include "include/geom_functions.hpp"
+#include "include/rw_functions.hpp"
 
 #include <algorithm>
+#include <boost/geometry/algorithms/length.hpp>
 #include <boost/geometry/iterators/ever_circling_iterator.hpp>
 #include <fstream>
 
@@ -17,6 +18,9 @@ int main(int argc, char* argv[]) {
     bool big_shift;
     double dist_points;
     double sz_shift;
+    int points_in_contour;
+    std::string directory_in;
+    std::string directory_out;
     boost::program_options::options_description desc("All options");
     desc.add_options()
         ("projections", boost::program_options::value<int>(&projections) -> default_value(30)
@@ -34,6 +38,12 @@ int main(int argc, char* argv[]) {
          , "distnce between points after grid or size of ceils")
         ("sz_shift", boost::program_options::value<double>(&sz_shift) 
          -> default_value(0.001), "size of small shifts")
+        ("points_in_contour", boost::program_options::value<int>(&points_in_contour)
+         -> default_value(0), "amount of points in densified contour, if equals zero then dist_points is using")
+        ("directory_in", boost::program_options::value<std::string>(&directory_in)
+         -> default_value("init_examples"), "directory where init fles are located")
+        ("directory_out", boost::program_options::value<std::string>(&directory_out)
+         -> default_value("res_examples"), "directory to store files")
         ("help", "produce help message")
         ;
     boost::program_options::variables_map vm;
@@ -45,8 +55,8 @@ int main(int argc, char* argv[]) {
     }
 
     for(int i = 0; i <= projections; ++i) {
-        std::string in_file = std::string("init_examples/contour_") + std::to_string(i);
-        std::string out_file = std::string("res_examples/contour_") + std::to_string(i); 
+        std::string in_file = directory_in + std::string("/contour_") + std::to_string(i);
+        std::string out_file = directory_out + std::string("/contour_") + std::to_string(i); 
     // FILES TO READ AND WRITE
         std::ifstream in(in_file);
         std::ofstream out(out_file);
@@ -70,7 +80,13 @@ int main(int argc, char* argv[]) {
         boost::geometry::model::linestring<Point2D> tmp_contour;
         if (grid) {
             if(grid_method == "uniform") {
-                boost::geometry::densify(in_contour, tmp_contour, dist_points);
+                if (points_in_contour > 0) {
+                    double perimetr = boost::geometry::length(in_contour);
+                    double local_dist = perimetr / points_in_contour;
+                    boost::geometry::densify(in_contour, tmp_contour, local_dist);
+                } else {
+                    boost::geometry::densify(in_contour, tmp_contour, dist_points);
+                }
             } else if (grid_method == "ceils") {
                 uniform_grid_intersection(in_contour, tmp_contour, dist_points);
             }
