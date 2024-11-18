@@ -1,0 +1,24 @@
+eal	0m0,221s
+user	0m0,110s
+sys	0m0,106s
+
+real	0m0,314s
+user	0m0,188s
+sys	0m0,126s
+
+real	0m1,296s
+user	0m1,163s
+sys	0m0,133s
+
+real	0m1,361s
+user	0m1,201s
+sys	0m0,161s
+
+real	0m0,119s
+user	0m0,105s
+sys	0m0,014s
+
+real	0m12,098s
+user	0m12,074s
+sys	0m0,018s
+
