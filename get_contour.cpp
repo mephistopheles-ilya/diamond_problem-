@@ -19,8 +19,16 @@ int main(int argc, char* argv[]) {
     std::string file;
     std::string projection_method;
     std::string shift_poly3d;
-    double parametr_of_changing;
     std::string directory;
+    bool is_change_shift;
+    bool is_change_azimuth;
+    bool is_change_slope;
+    double parametr_of_shift;
+    double parametr_of_azimuth;
+    double parametr_of_slope;
+    int sign_of_c;
+    std::string distribution;
+    double sigma;
     boost::program_options::options_description desc("All options");
     desc.add_options()
         ("projections", boost::program_options::value<int>(&projections) -> default_value(30)
@@ -31,10 +39,26 @@ int main(int argc, char* argv[]) {
          -> default_value("hull"), "method to make projection : hull, obvious, graph")
         ("shift_poly3d", boost::program_options::value<std::string>(&shift_poly3d)
          -> default_value("points"), "get initial polyhedron from points or from facets equatios: points or equatinos")
-        ("change", boost::program_options::value<double>( &parametr_of_changing)
-         -> default_value(0.001), "shift facets equasions")
         ("directory", boost::program_options::value<std::string>(&directory)
          -> default_value("init_examples"), "deroctory to restore files")
+        ("is_change_shift", boost::program_options::value<bool>(&is_change_shift)
+         -> default_value(false), "do you want to shift a parametr d")
+        ("is_change_azimuth", boost::program_options::value<bool>(&is_change_azimuth)
+         -> default_value(false), "do you want to change azimuth")
+        ("is_change_slope", boost::program_options::value<bool>(&is_change_slope)
+         -> default_value(false), "do you want to change slope")
+        ("parametr_of_shift", boost::program_options::value<double>(&parametr_of_shift)
+         -> default_value(0.0001), " d += parametr_of_shift")
+        ("parametr_of_azimuth", boost::program_options::value<double>(&parametr_of_azimuth)
+         -> default_value(0.0001), " azimuth += parametr_of_azimuth")
+        ("parametr_of_slope", boost::program_options::value<double>(&parametr_of_slope)
+         -> default_value(0.0001), " slope += parametr_of_slope")
+        ("sign_of_c", boost::program_options::value<int>(&sign_of_c)
+         -> default_value(1), "sign of coefficient c of palnes which will be changed")
+        ("distribution", boost::program_options::value<std::string>(&distribution)
+         -> default_value("uniform"), "distribution in changind vectors of facets")
+        ("sigma", boost::program_options::value<double>(&sigma)
+         -> default_value(0.0001), "dispearsion in normal distribution")
         ("help", "produce help message")
         ;
     boost::program_options::variables_map vm;
@@ -69,7 +93,9 @@ int main(int argc, char* argv[]) {
                 , arr_points3d, arr_norm3d, arr_edges3d);
     } else {
         std::tie(num_vertices, num_facest, num_edges)  = read_spoil_structures_from_file(in
-            , arr_points3d, arr_norm3d, arr_edges3d, parametr_of_changing); 
+            , arr_points3d, arr_norm3d, arr_edges3d, is_change_shift, parametr_of_shift
+            , is_change_azimuth, parametr_of_azimuth, is_change_slope, parametr_of_slope
+            , sign_of_c, distribution, sigma); 
     }
     std::cout << "num_vertices = " << num_vertices << ' ' << arr_points3d.size() << '\n';
     std::cout << "num_facest = " << num_facest << ' ' << arr_norm3d.size() << '\n';

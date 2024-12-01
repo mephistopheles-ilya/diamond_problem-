@@ -21,6 +21,8 @@ int main(int argc, char* argv[]) {
     int points_in_contour;
     std::string directory_in;
     std::string directory_out;
+    std::string distribution;
+    double sigma;
     boost::program_options::options_description desc("All options");
     desc.add_options()
         ("projections", boost::program_options::value<int>(&projections) -> default_value(30)
@@ -44,6 +46,10 @@ int main(int argc, char* argv[]) {
          -> default_value("init_examples"), "directory where init fles are located")
         ("directory_out", boost::program_options::value<std::string>(&directory_out)
          -> default_value("res_examples"), "directory to store files")
+        ("distribution", boost::program_options::value<std::string>(&distribution)
+         -> default_value("uniform"), "type if distribution for small shifts")
+        ("sigma", boost::program_options::value<double>(&sigma)
+         -> default_value(0.001), "dispersion of normal distribution for small shifts")
         ("help", "produce help message")
         ;
     boost::program_options::variables_map vm;
@@ -107,7 +113,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (shift) {
-            create_small_shifts(in_contour, sz_shift);
+            create_small_shifts(in_contour, sz_shift, distribution, sigma);
             if(!boost::geometry::is_valid(in_contour, message)){
                 std::cerr << "small shift contour is NOT valid " << message << std::endl;
                 std::cerr << "trying to correct..." << std::endl;

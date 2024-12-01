@@ -7,15 +7,48 @@
 #include <iterator>
 #include <list>
 #include <tuple>
+#include <random>
 
+#include <CGAL/Polyhedron_3.h>
+#include <CGAL/IO/PLY.h>
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Convex_hull_3/dual/halfspace_intersection_3.h>
-#include <CGAL/Polyhedron_3.h>
+#include <CGAL/Polyhedron_3_fwd.h>
+#include <CGAL/Surface_mesh.h>
+#include <CGAL/Convex_hull_3/dual/halfspace_intersection_with_constructions_3.h>
+
+
+
+#include <CGAL/Polyhedron_3_fwd.h>
+
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel   K;
 typedef CGAL::Polyhedron_3<K>                                 Polyhedron_3;
 typedef K::Plane_3                                            Plane;
 typedef K::Point_3                                            Point_3;
+
+
+#define _DTOR_   0.0174532925199432957692         //  PI / 180
+inline double Rad2Deg(double a) { return a / _DTOR_; }
+inline double Deg2Rad(double a) { return a * _DTOR_; }
+ 
+double Azimuth(const Point3D& v) {
+    double a = atan2(v.x, v.y);
+    return (a >= 0) ? a : a + 2*M_PI;
+}
+
+double Slope(const Point3D &v) {
+    double d = sqrt(v.x*v.x + v.y*v.y);
+    return atan2(v.z, d);
+}
+
+Point3D VectorFrom(double azimuth, double slope, double length) {
+    double c = cos(slope);
+    Point3D v(length*sin(azimuth)*c, length*cos(azimuth)*c, length*sin(slope));
+    return v;
+}
+
+
 
 
 
@@ -40,10 +73,21 @@ std::tuple<double, double, double> compute_plane_equation(const Polyhedron_3::Fa
     return std::make_tuple(A, B, C);
 }
 
+int sign(double number) {
+    if (number > 0) {
+        return 1;
+    }
+    if (number < 0) {
+        return -1;
+    }
+    return 0;
+}
 
 std::tuple<int, int, int> read_spoil_structures_from_file(std::istream& in
         , std::vector<Point3D>& arr_points3d, std::vector<Point3D>& arr_norm3d
-        , std::vector<Edge>& arr_edges3d, double parametr_of_changing) {
+        , std::vector<Edge>& arr_edges3d, bool is_change_shift,  double parametr_of_shift
+        , bool is_change_azimuth, double parametr_of_azimuth, bool is_change_slope, double parametr_of_slope
+        , int sign_of_c, std::string distribution, double sigma) {
 
 
     std::list<Plane> planes;
@@ -86,14 +130,64 @@ std::tuple<int, int, int> read_spoil_structures_from_file(std::istream& in
     }
     std::getline(in, line);
     int counter = 1;
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dis_uni_azimuth(-parametr_of_azimuth, parametr_of_azimuth);
+    std::uniform_real_distribution<> dis_uni_slope(-parametr_of_slope, parametr_of_slope);
+    std::uniform_real_distribution<> dis_uni_shift(-parametr_of_shift, parametr_of_shift);
+    std::normal_distribution<> dis_normal_azimuth(0, sigma);
+    std::normal_distribution<> dis_normal_slope(0, sigma);
+    std::normal_distribution<> dis_normal_shift(0, sigma);
+
     srand(time(NULL));
     while(line.find(stop) == std::string::npos) {
         double a, b, c, d;
         int unused1, unused2;
         sscanf(line.c_str(), "%d %d %lf %lf %lf %lf", &unused1, &unused2, &a, &b, &c, &d);
-        if (c > 0) {
-            typename K::Plane_3 plane(a, b, c, d + parametr_of_changing);
-            planes.push_back(plane);
+        if (sign_of_c == sign(c)) {
+            Point3D vec(a, b, c);
+            double azimuth = Azimuth(vec);
+            double slope = Slope(vec);
+            if (is_change_azimuth == true) {
+                if (distribution == "uniform") {
+                    azimuth += dis_uni_azimuth(gen);
+                } else {
+                    double l = dis_normal_azimuth(gen);
+                    if (std::fabs(l) > parametr_of_azimuth) {
+                        l = (l > 0) ? parametr_of_azimuth : -parametr_of_azimuth;
+                    }
+                    azimuth += l;
+                }   
+            }
+            if (is_change_slope == true) {
+                if (distribution == "uniform") {
+                    slope += dis_uni_slope(gen);
+                } else {
+                    double l = dis_normal_slope(gen);
+                    if (std::fabs(l) > parametr_of_slope) {
+                        l = (l > 0) ? parametr_of_slope : -parametr_of_slope;
+                    }
+                    slope += l;
+                }   
+
+            }
+            vec = VectorFrom(azimuth, slope, 1);
+            if (is_change_shift == true) {
+                if (distribution == "uniform") {
+                    d += dis_uni_shift(gen);
+                } else {
+                    double l = dis_normal_shift(gen);
+                    if (std::fabs(l) > parametr_of_shift) {
+                        l = (l > 0) ? parametr_of_shift : -parametr_of_shift;
+                    }
+                    d += l;
+                }   
+                typename K::Plane_3 plane(vec.x, vec.y, vec.z, d);
+                planes.push_back(plane);
+            } else {
+                typename K::Plane_3 plane(vec.x, vec.y, vec.z, d);
+                planes.push_back(plane);
+            }
         } else {
             typename K::Plane_3 plane(a, b, c, d);
             planes.push_back(plane);
@@ -103,7 +197,9 @@ std::tuple<int, int, int> read_spoil_structures_from_file(std::istream& in
         ++counter;
     }
 
-    CGAL::halfspace_intersection_3(planes.begin(), planes.end(), poly);
+    CGAL::halfspace_intersection_with_constructions_3(planes.begin(), planes.end(), poly);
+    //std::ofstream of("debug.ply");
+    //CGAL::IO::write_PLY(of, poly);
     for(auto it = poly.vertices_begin(); it != poly.vertices_end(); ++it) {
         arr_points3d.emplace_back((*it).point().x(), (*it).point().y(), (*it).point().z());
     }

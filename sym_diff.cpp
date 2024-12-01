@@ -55,9 +55,10 @@ int main(int argc, char* argv[]) {
         for(auto& pol: polys) {
             area += boost::geometry::area(pol);
         }
+
         double per = boost::geometry::perimeter(poly1) + boost::geometry::perimeter(poly2);
         per /= 2;
-        std::cout << area / per << std::endl;
+        std::cout << area/ per << std::endl;
     }
 }
 

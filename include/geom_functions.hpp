@@ -62,7 +62,8 @@ void projection_graph(std::vector<Point3D>& arr_points3d
 
 Point2D rotate(Point2D p, double angle);
 void spoil_and_get_protrusions(std::vector<Point2D>& v, std::vector<boost::geometry::model::polygon<Point2D, false, true, std::vector>>& vec_of_pol, std::vector<bool>& mask); 
-void create_small_shifts(boost::geometry::model::linestring<Point2D>& pol, double sz_shift);
+void create_small_shifts(boost::geometry::model::linestring<Point2D>& pol, double sz_shift
+        , std::string distribution, double sigma);
 void uniform_grid_intersection(boost::geometry::model::linestring<Point2D>& line
         , boost::geometry::model::linestring<Point2D>& new_line
         , double dist_points = __DISTANCE_BETWEEN_POINTS);

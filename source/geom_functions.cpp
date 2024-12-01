@@ -128,23 +128,45 @@ Point2D rotate(Point2D p, double angle) {
     return Point2D(p.x * a + p.y * b, p.x * c + p.y * d);
 }
 
-void create_small_shifts(boost::geometry::model::linestring<Point2D>& line, double sz_shift) {
+void create_small_shifts(boost::geometry::model::linestring<Point2D>& line, double sz_shift
+        , std::string distribution, double sigma) {
     std::random_device rd;  
     std::mt19937 gen(rd()); 
-    std::uniform_real_distribution<> dis(-sz_shift, sz_shift);
+    std::uniform_real_distribution<> dis_uni(-sz_shift, sz_shift);
+    std::normal_distribution<> dis_normal(0, sigma);
     size_t end = line.size() - 1;
-    for(size_t i = 1; i < end; ++i) {
-        Point2D direction = line[i] - line[i + 1];
-        direction = Point2D(direction.y, -direction.x);
-        double distance  = boost::geometry::distance(line[i], line[i + 1]);
-        if (distance < EPSILON) {
-            distance = boost::geometry::distance(line[i - 1], line[i + 2]);
-            direction = line[i - 1] - line[i + 2];
+    if (distribution == "normal") {
+        for(size_t i = 1; i < end; ++i) {
+            Point2D direction = line[i] - line[i + 1];
+            direction = Point2D(direction.y, -direction.x);
+            double distance  = boost::geometry::distance(line[i], line[i + 1]);
+            if (distance < EPSILON) {
+                distance = boost::geometry::distance(line[i - 1], line[i + 2]);
+                direction = line[i - 1] - line[i + 2];
+            }
+            direction = direction / distance;
+            double l = dis_normal(gen);
+            if (std::fabs(l) > sz_shift) {
+                l = (l > 0) ? sz_shift : -sz_shift;
+            }
+            direction = direction * l;
+            line[i] = line[i] + direction;
         }
-        direction = direction / distance; 
-        direction = direction * dis(gen);
-        line[i] = line[i] + direction;
+    } else {
+        for(size_t i = 1; i < end; ++i) {
+            Point2D direction = line[i] - line[i + 1];
+            direction = Point2D(direction.y, -direction.x);
+            double distance  = boost::geometry::distance(line[i], line[i + 1]);
+            if (distance < EPSILON) {
+                distance = boost::geometry::distance(line[i - 1], line[i + 2]);
+                direction = line[i - 1] - line[i + 2];
+            }
+            direction = direction / distance;
+            direction = direction * dis_uni(gen);
+            line[i] = line[i] + direction;
+        }
     }
+
 }
 
 
