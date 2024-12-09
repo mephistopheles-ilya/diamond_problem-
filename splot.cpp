@@ -21,8 +21,31 @@
 typedef CGAL::Exact_predicates_inexact_constructions_kernel   K;
 typedef CGAL::Polyhedron_3<K>                                 Polyhedron_3;
 typedef K::Plane_3                                            Plane;
-typedef K::Point_3                                            Point;
-typedef CGAL::Surface_mesh<Point>                             Surface_mesh;
+typedef K::Point_3                                            Point_3;
+typedef CGAL::Surface_mesh<Point_3>                             Surface_mesh;
+
+std::tuple<double, double, double> compute_plane_equation(const Polyhedron_3::Face& face) {
+    auto halfedge = face.halfedge();
+    Point_3 p1 = halfedge->vertex()->point();
+    Point_3 p2 = halfedge->next()->vertex()->point();
+    Point_3 p3 = halfedge->next()->next()->vertex()->point();
+
+    K::Vector_3 v1 = p2 - p1;
+    K::Vector_3 v2 = p3 - p1;
+
+    K::Vector_3 normal = CGAL::cross_product(v1, v2);
+    double A = normal.x();
+    double B = normal.y();
+    double C = normal.z();
+    double length = std::sqrt(A * A + B * B + C * C);
+    A /= length;
+    B /= length;
+    C /= length;
+
+    return std::make_tuple(A, B, C);
+}
+
+
 
 #define _DTOR_   0.0174532925199432957692         //  PI / 180
 inline double Rad2Deg(double a) { return a / _DTOR_; }
@@ -235,15 +258,19 @@ int main (int argc, char* argv[]) {
     //CGAL::IO::write_STL(of1, chull);
     CGAL::IO::write_PLY(of2, chull);
 
-#if 0
+#if 1
+    std::ofstream gplot("gnu.txt");
     for(auto it = chull.facets_begin(); it != chull.facets_end(); ++it) {
-        auto v = it->facet_begin();
-        for(int i = 0; i < it->size(); ++i) {
-            std::cout << v->vertex()->point() << std::endl;
-            ++v;
+        auto [A, B, C] = compute_plane_equation(*it);
+        if (sign(C) == sign_of_c) {
+            auto v = it->facet_begin();
+            for(int i = 0; i < it->size(); ++i) {
+                gplot << v->vertex()->point() << std::endl;
+                ++v;
+            }
+            gplot << it->facet_begin()->vertex()->point() << std::endl;
+            gplot << std::endl << std::endl;
         }
-        std::cout << it->facet_begin()->vertex()->point() << std::endl;
-        std::cout << std::endl << std::endl;
     }
 #endif
 
