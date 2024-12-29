@@ -224,7 +224,7 @@ std::tuple<int, int, int> read_spoil_structures_from_file(std::istream& in
         int point_index_2 = 0;
         int norm_index_1 = 0;
         int norm_index_2 = 0;
-        for(int i = 0; i < arr_points3d.size(); ++i) {
+        for(int i = 0; i < static_cast<int>(arr_points3d.size()); ++i) {
             if (arr_points3d[i] == p1) {
                 point_index_1 = i;
             }
@@ -232,7 +232,7 @@ std::tuple<int, int, int> read_spoil_structures_from_file(std::istream& in
                 point_index_2 = i;
             }
         }
-        for(int i = 0; i < arr_norm3d.size(); ++i) {
+        for(int i = 0; i < static_cast<int>(arr_norm3d.size()); ++i) {
             if (arr_norm3d[i] == norm1) {
                 norm_index_1 = i;
             }
