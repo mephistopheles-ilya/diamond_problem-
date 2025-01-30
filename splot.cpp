@@ -264,7 +264,7 @@ int main (int argc, char* argv[]) {
         auto [A, B, C] = compute_plane_equation(*it);
         if (sign(C) == sign_of_c) {
             auto v = it->facet_begin();
-            for(int i = 0; i < it->size(); ++i) {
+            for(size_t i = 0; i < it->size(); ++i) {
                 gplot << v->vertex()->point() << std::endl;
                 ++v;
             }

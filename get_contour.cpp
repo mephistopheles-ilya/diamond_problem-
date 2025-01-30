@@ -3,7 +3,9 @@
 #include "include/edge.hpp"
 #include "include/rw_functions.hpp"
 #include "include/geom_functions.hpp"
+#include "include/file_formats.hpp"
 
+#include <boost/geometry/algorithms/detail/distance/interface.hpp>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -29,6 +31,8 @@ int main(int argc, char* argv[]) {
     int sign_of_c;
     std::string distribution;
     double sigma;
+    std::string type_of_file;
+    std::string name_of_con_file;
     boost::program_options::options_description desc("All options");
     desc.add_options()
         ("projections", boost::program_options::value<int>(&projections) -> default_value(30)
@@ -59,6 +63,10 @@ int main(int argc, char* argv[]) {
          -> default_value("uniform"), "distribution in changind vectors of facets")
         ("sigma", boost::program_options::value<double>(&sigma)
          -> default_value(0.0001), "dispearsion in normal distribution")
+        ("type_of_file", boost::program_options::value<std::string>(&type_of_file)
+         -> default_value("angle"), "angle or number in postfix after Contour... or con1, con2 or con3")
+        ("name_of_con_file", boost::program_options::value<std::string>(&name_of_con_file)
+         -> default_value("con_file"), "name of file if data is saving in con format")
         ("help", "produce help message")
         ;
     boost::program_options::variables_map vm;
@@ -67,6 +75,10 @@ int main(int argc, char* argv[]) {
     if (vm.count("help")) {
         std::cout << desc << "\n";
         return 1;
+    }
+    if (projections <= 0) {
+        std::cerr << "Wrong amount of projections" << std::endl;
+        return 2;
     }
 
     std::cout << "Command line optiosn: " << std::endl;
@@ -102,6 +114,7 @@ int main(int argc, char* argv[]) {
     std::cout << "num_edges = " << num_edges << ' ' << arr_edges3d.size() <<  std::endl;
 
 //CREATING PROJECTIONS
+    std::vector<std::vector<Point2D>> contours(projections + 1);
     for (int step = 0; step <= projections; ++step) { 
         boost::geometry::model::polygon<Point2D, false, true, std::vector> hull;
         double angle = step * std::numbers::pi_v<double>/projections;
@@ -137,18 +150,70 @@ int main(int argc, char* argv[]) {
             }
         } 
 
-        std::string file = directory + std::string("/contour_") + std::to_string(step);
-        std::ofstream print_res(file);
-        if (!print_res.is_open()) {
-            std::cerr << "problem with opening : " << file << std::endl;
+        std::string file;
+        if (type_of_file == "angle") {
+            std::string angle_in_degrees = std::to_string(step * 180./projections);
+            angle_in_degrees = angle_in_degrees.substr(0, angle_in_degrees.find(".") + 4);
+            auto pos = angle_in_degrees.find(".");
+            std::string zeros;
+            while(pos < 3) {
+                pos++;
+                zeros += "0";
+            }
+            angle_in_degrees = zeros + angle_in_degrees;
+            file = directory + std::string("/Contour") + angle_in_degrees + std::string(".txt");
+        } else if (type_of_file == "number") {
+            file = directory + std::string("/Contour") + std::to_string(step) + std::string(".txt");
         }
-        std::ranges::copy_if(l, std::ostream_iterator<Point2D>(print_res, "\n")
-                , [min_y_coord = min_y_coord, min_x_coord =  min_x_coord
-                , max_x_coord =  max_x_coord](Point2D& p) { 
-                return ((p.y - min_y_coord) >= BOTTOM_ERR) || ((p.x - min_x_coord) < EPSILON) ||
-                ((max_x_coord - p.x) < EPSILON); });
-    }
 
+        if(type_of_file != "con1" && type_of_file != "con2" && type_of_file != "con3") {
+            std::ofstream print_res(file);
+            if (!print_res.is_open()) {
+                std::cerr << "problem with opening : " << file << std::endl;
+            }
+            std::ranges::copy_if(l, std::ostream_iterator<Point2D>(print_res, "\n")
+                    , [min_y_coord = min_y_coord, min_x_coord =  min_x_coord
+                    , max_x_coord =  max_x_coord](Point2D& p) { 
+                    return ((p.y - min_y_coord) >= BOTTOM_ERR) || ((p.x - min_x_coord) < EPSILON) ||
+                    ((max_x_coord - p.x) < EPSILON); });
+        } else if(type_of_file == "con1" || type_of_file == "con2" || type_of_file == "con3") {
+            std::ranges::copy_if(l, std::back_insert_iterator(contours[step])
+                    , [min_y_coord = min_y_coord, min_x_coord =  min_x_coord
+                    , max_x_coord =  max_x_coord](Point2D& p) { 
+                    return ((p.y - min_y_coord) >= BOTTOM_ERR) || ((p.x - min_x_coord) < EPSILON) ||
+                    ((max_x_coord - p.x) < EPSILON); });
+        }
+    }
+    if(type_of_file == "con1" || type_of_file == "con2" || type_of_file == "con3") {
+        double pixel = 0;
+        size_t amount_of_points = 0;
+        unsigned int nc = contours.size();
+        for(size_t i = 0; i < nc; ++i) {
+            std::vector<Point2D>& points = contours[i];
+            unsigned int nv = points.size();
+            amount_of_points += nv;
+            for(size_t j = 0; j < nv - 1; ++j) {
+                pixel = std::max(pixel, boost::geometry::distance(points[i], points[i + 1]));
+            }
+        }
+        pixel /= amount_of_points;
+        int ver = 0;
+        if (type_of_file == "con1") {
+            ver = 1;
+        }
+        if (type_of_file == "con2") {
+            ver = 2;
+        }
+        if (type_of_file == "con3") {
+            ver = 3;
+        }
+        bool ret;
+        ret = save_con_file(name_of_con_file, pixel, std::make_tuple(0, 0, 1, 0), contours, ver);
+        if (ret == false) {
+            std::cerr << "Cannot write con file" << std::endl;
+        }
+    }
+    return 0;
 }
 
 
