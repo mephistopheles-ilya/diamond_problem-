@@ -6,6 +6,7 @@
 #include <CGAL/Convex_hull_3/dual/halfspace_intersection_with_constructions_3.h>
 #include <CGAL/IO/STL.h>
 #include <CGAL/IO/PLY.h>
+#include <CGAL/boost/graph/IO/OBJ.h>
 
 #include <boost/program_options.hpp>
 
@@ -257,8 +258,10 @@ int main (int argc, char* argv[]) {
     std::ofstream of2(outputfile);
     //CGAL::IO::write_STL(of1, chull);
     CGAL::IO::write_PLY(of2, chull);
+    //CGAL::IO::write_OBJ(of2, chull);
 
-#if 1
+
+#if 0
     std::ofstream gplot("gnu.txt");
     for(auto it = chull.facets_begin(); it != chull.facets_end(); ++it) {
         auto [A, B, C] = compute_plane_equation(*it);

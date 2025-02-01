@@ -58,7 +58,40 @@ add_executable(con_to_txt.out con_to_txt.cpp)
 target_link_libraries(con_to_txt.out libgeom)
 set_target_properties(con_to_txt.out PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
-# executable for creating txt files from con file
+# executable for creating con files from txt file
 add_executable(txt_to_con.out txt_to_con.cpp)
 target_link_libraries(txt_to_con.out libgeom)
 set_target_properties(txt_to_con.out PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+# executable for creating txt files from obj file
+add_executable(obj_to_txt.out obj_to_txt.cpp)
+target_compile_options(obj_to_txt.out PUBLIC 
+    $<$<CONFIG:Debug>: -O0 -g -Wall -Wextra -Wpedantic -fsanitize=leak,undefined,address>
+    $<$<CONFIG:Release>: -O3 -DNDEBUG -Wall -Wextra -Wpedantic>
+)
+
+target_link_options(obj_to_txt.out PUBLIC
+    $<$<CONFIG:Debug>: -fsanitize=leak,undefined,address>
+)
+
+target_link_libraries(obj_to_txt.out PUBLIC
+    boost_program_options
+)
+set_target_properties(obj_to_txt.out PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+# executable for creating obj files from txt file
+add_executable(txt_to_obj.out txt_to_obj.cpp)
+target_compile_options(txt_to_obj.out PUBLIC 
+    $<$<CONFIG:Debug>: -O0 -g -Wall -Wextra -Wpedantic -fsanitize=leak,undefined,address>
+    $<$<CONFIG:Release>: -O3 -DNDEBUG -Wall -Wextra -Wpedantic>
+)
+
+target_link_options(txt_to_obj.out PUBLIC
+    $<$<CONFIG:Debug>: -fsanitize=leak,undefined,address>
+)
+
+target_link_libraries(txt_to_obj.out PUBLIC
+    boost_program_options
+)
+set_target_properties(txt_to_obj.out PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
