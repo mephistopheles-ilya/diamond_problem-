@@ -193,10 +193,11 @@ int main(int argc, char* argv[]) {
             unsigned int nv = points.size();
             amount_of_points += nv;
             for(size_t j = 0; j < nv - 1; ++j) {
-                pixel = std::max(pixel, boost::geometry::distance(points[i], points[i + 1]));
+                pixel += boost::geometry::distance(points[i], points[i + 1]);
             }
         }
         pixel /= amount_of_points;
+        pixel = std::sqrt(pixel);
         int ver = 0;
         if (type_of_file == "con1") {
             ver = 1;
@@ -208,7 +209,7 @@ int main(int argc, char* argv[]) {
             ver = 3;
         }
         bool ret;
-        ret = save_con_file(name_of_con_file, pixel, std::make_tuple(0, 0, 1, 0), contours, ver);
+        ret = save_con_file(name_of_con_file, pixel, std::make_tuple(0, 0, -1, 0), contours, ver);
         if (ret == false) {
             std::cerr << "Cannot write con file" << std::endl;
         }
