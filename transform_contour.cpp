@@ -61,8 +61,18 @@ int main(int argc, char* argv[]) {
     }
 
     for(int i = 0; i <= projections; ++i) {
-        std::string in_file = directory_in + std::string("/contour_") + std::to_string(i);
-        std::string out_file = directory_out + std::string("/contour_") + std::to_string(i); 
+            std::string angle_in_degrees = std::to_string(i * 180./projections);
+            angle_in_degrees = angle_in_degrees.substr(0, angle_in_degrees.find(".") + 4);
+            auto pos = angle_in_degrees.find(".");
+            std::string zeros;
+            while(pos < 3) {
+                pos++;
+                zeros += "0";
+            }
+            angle_in_degrees = zeros + angle_in_degrees;
+
+        std::string in_file = directory_in + std::string("/Contour") + angle_in_degrees + std::string(".txt");
+        std::string out_file = directory_out + std::string("/Contour") + angle_in_degrees + std::string(".txt");
     // FILES TO READ AND WRITE
         std::ifstream in(in_file);
         std::ofstream out(out_file);
@@ -96,6 +106,7 @@ int main(int argc, char* argv[]) {
             } else if (grid_method == "ceils") {
                 uniform_grid_intersection(in_contour, tmp_contour, dist_points);
             }
+
             if(!boost::geometry::is_valid(tmp_contour, message)) {
                 std::cout << "densified contour is NOT valid " << message << std::endl;
                 std::cout << "trying to correct..." << std::endl;

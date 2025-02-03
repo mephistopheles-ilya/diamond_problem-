@@ -79,7 +79,7 @@ void uniform_grid_intersection(boost::geometry::model::linestring<Point2D>& line
             while(x_flag || y_flag) {
                 double dist_x = boost::geometry::distance(curent_point, next_point_x);
                 double dist_y = boost::geometry::distance(curent_point, next_point_y);
-                if(dist_x < dist_y) {
+                if(dist_x <=dist_y) {
                     new_line.push_back(next_point_x);
                     curent_point = next_point_x;
                     (vec.x > 0) ? (++x_index) : (--x_index);
@@ -95,7 +95,9 @@ void uniform_grid_intersection(boost::geometry::model::linestring<Point2D>& line
                     next_point_y = Point2D(-(B * next_y + C) / A, next_y);
                     y_flag = (vec.y > 0) ? ((next_y < point2.y) ? true : false) 
                         : ((next_y > point2.y) ? true : false);
-                } else {
+                }
+#if 0
+                else {
                     new_line.push_back(next_point_x);
                     curent_point = next_point_x;
                     ++x_index;
@@ -109,6 +111,7 @@ void uniform_grid_intersection(boost::geometry::model::linestring<Point2D>& line
                     y_flag = (vec.y > 0) ? ((next_y < point2.y) ? true : false) 
                         : ((next_y > point2.y) ? true : false);
                 }
+#endif
             }
         }
         point1 = point2;

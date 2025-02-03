@@ -1,9 +1,12 @@
 #include <fstream>
 #include <iostream>
+#include <limits>
+#include <string>
 #include <tuple>
 #include <vector>
 #include <filesystem>
 #include <algorithm>
+#include <cstdio>
 #include "include/geom_functions.hpp"
 
 #include "include/file_formats.hpp"
@@ -16,6 +19,7 @@ int main(int argc, char* argv[]) {
     std::string name_of_con_file;
     std::string directory;
     std::string type_of_file;
+    std::string model_in_txt;
     boost::program_options::options_description desc("All options");
     desc.add_options()
         ("name_of_con_file", boost::program_options::value<std::string>(&name_of_con_file) 
@@ -24,6 +28,8 @@ int main(int argc, char* argv[]) {
          -> default_value("./init_examples"), "name of dirictory whrere files with points are located (full path)")
         ("type_of_file", boost::program_options::value<std::string>(&type_of_file)
          -> default_value("con1"), "con1 or con2 or con3") 
+        ("model_in_txt", boost::program_options::value<std::string>(&model_in_txt) 
+         -> default_value("InitialModels/InitialModel5"), "3d model of contours to get holder")
         ("help", "produce help message")
         ;
     boost::program_options::variables_map vm;
@@ -90,8 +96,31 @@ int main(int argc, char* argv[]) {
     if (type_of_file == "con3") {
         ver = 3;
     }
+    std::ifstream iss(model_in_txt);
+    double min_z = std::numeric_limits<double>().max();
+    if (iss.is_open() == false) {
+        min_z = -1;
+    } else {
+        std::string line;
+        std::string start("vertices:");
+        std::string stop("#");
+        std::getline(iss, line);
+        while(line.find(start) == std::string::npos) {
+            std::getline(iss, line);
+        }
+        std::getline(iss, line);
+        std::getline(iss, line);
+        while(line.find(stop) == std::string::npos) {
+            int number = 0;
+            double x = 0, y = 0, z = 0;
+            sscanf(line.data(), "%d %lf %lf %lf", &number, &x, &y, &z);
+            min_z = std::min(z, min_z);
+            std::getline(iss, line);
+        }
+    }
+
     bool ret;
-    ret = save_con_file(name_of_con_file, pixel, std::make_tuple(0, 0, -1, 0), contours, ver);
+    ret = save_con_file(name_of_con_file, pixel, std::make_tuple(0, 0, 1, -min_z), contours, ver);
     if (ret == false) {
         std::cerr << "Cannot write con file" << std::endl;
     }

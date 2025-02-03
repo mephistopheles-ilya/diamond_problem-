@@ -22,6 +22,10 @@ bool save_con_file (const std::string& name, double pixel, std::tuple<double, do
     if (fwrite(&std::get<3>(plane), 8, 1, file) != 1 ) return false;
     double scale = 0;
     unsigned int nc = static_cast<unsigned int>(contours.size());
+    if(nc <= 1) {
+        std::cerr << "Wrong amount of contours" << std::endl;
+        return false;
+    }
     if (ver == 3) {
         for (size_t i = 0; i < nc; ++i) {
             const std::vector<Point2D>& points = contours[i];
@@ -41,7 +45,7 @@ bool save_con_file (const std::string& name, double pixel, std::tuple<double, do
     std::vector<int8_t> byte;
     for (size_t i = 0; i < nc; ++i) {
         const std::vector<Point2D>& points = contours[i];
-        double angle = i * std::numbers::pi_v<double>/nc;
+        double angle = i * std::numbers::pi_v<double>/(nc - 1);
         if (fwrite(&angle, 8, 1, file) != 1 ) return false;
         unsigned int nv = points.size();
         if (fwrite(&nv, 4, 1, file) != 1 ) return false;
