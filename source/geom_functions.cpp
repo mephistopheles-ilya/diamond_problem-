@@ -230,11 +230,23 @@ void make_projection(double angle, std::vector<Point3D>& arr_points3d
     double sin_a = std::sin(angle);
     double cos_a = std::cos(angle);
     auto func = [sin_a, cos_a](Point3D& p) {
+#if 0
+        double length = std::sqrt(p.x * p.x + p.y * p.y);
+        double sin_b = p.y / length;
+        double cos_b = p.x / length;
+        double cos_a_b = cos_a * cos_b + sin_a * sin_b;
+        return Point2D(length * cos_a_b, p.z);
+#endif
+#if 0
         double length = std::sqrt(p.x * p.x + p.y * p.y);
         double sin_b = p.y / length;
         double cos_b = p.x / length;
         double sin_a_b = sin_a * cos_b - sin_b * cos_a;
         return Point2D(length * sin_a_b, p.z);
+#endif
+#if 1
+        return Point2D(sin_a * p.x + cos_a * p.y, p.z);
+#endif
     }; 
     std::ranges::transform(arr_points3d, std::back_inserter(mpoint), func);
 }

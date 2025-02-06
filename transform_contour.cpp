@@ -60,7 +60,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    for(int i = 0; i <= projections; ++i) {
+    for(int i = 0; i < projections; ++i) {
             std::string angle_in_degrees = std::to_string(i * 180./projections);
             angle_in_degrees = angle_in_degrees.substr(0, angle_in_degrees.find(".") + 4);
             auto pos = angle_in_degrees.find(".");

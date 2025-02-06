@@ -115,7 +115,7 @@ int main(int argc, char* argv[]) {
 
 //CREATING PROJECTIONS
     std::vector<std::vector<Point2D>> contours(projections + 1);
-    for (int step = 0; step <= projections; ++step) { 
+    for (int step = 0; step < projections; ++step) { 
         boost::geometry::model::polygon<Point2D, false, true, std::vector> hull;
         double angle = step * std::numbers::pi_v<double>/projections;
 //CHOOSING METHOD TO CREATE PRIJECTIONS
