@@ -95,3 +95,19 @@ target_link_libraries(txt_to_obj.out PUBLIC
 )
 set_target_properties(txt_to_obj.out PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_executable(ply_to_obj.out ply_to_obj.cpp)
+target_compile_options(ply_to_obj.out PUBLIC 
+    $<$<CONFIG:Debug>: -O0 -g -Wall -Wextra -Wpedantic -fsanitize=leak,undefined,address>
+    $<$<CONFIG:Release>: -O3 -DNDEBUG -Wall -Wextra -Wpedantic>
+)
+
+target_link_options(ply_to_obj.out PUBLIC
+    $<$<CONFIG:Debug>: -fsanitize=leak,undefined,address>
+)
+
+target_link_libraries(ply_to_obj.out PUBLIC
+    boost_program_options
+)
+set_target_properties(ply_to_obj.out PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+

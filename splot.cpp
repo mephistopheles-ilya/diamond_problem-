@@ -93,7 +93,6 @@ void read_planes(std::istream& is, std::list<Plane>& planes, bool is_change_shif
             break;
     }
     std::getline(is, line);
-    int counter = 1;
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> dis_uni_azimuth(-parametr_of_azimuth, parametr_of_azimuth);
@@ -141,7 +140,8 @@ void read_planes(std::istream& is, std::list<Plane>& planes, bool is_change_shif
             planes.push_back(plane);
         }
 #endif
-        if (sign_of_c == sign(c)) {
+        int stop = std::sin(5 * std::numbers::pi / 180);
+        if (sign_of_c == sign(c) && (c > stop || c < -stop)) {
             Point3D vec(a, b, c);
             double azimuth = Azimuth(vec);
             double slope = Slope(vec);
@@ -150,8 +150,8 @@ void read_planes(std::istream& is, std::list<Plane>& planes, bool is_change_shif
                     azimuth += dis_uni_azimuth(gen);
                 } else {
                     double l = dis_normal_azimuth(gen);
-                    if (std::fabs(l) > parametr_of_azimuth) {
-                        l = (l > 0) ? parametr_of_azimuth : -parametr_of_azimuth;
+                    if (std::fabs(l) > 2 * sigma) {
+                        l = (l > 0) ? 2 * sigma : -2 * sigma;
                     }
                     azimuth += l;
                 }   
@@ -161,8 +161,8 @@ void read_planes(std::istream& is, std::list<Plane>& planes, bool is_change_shif
                     slope += dis_uni_slope(gen);
                 } else {
                     double l = dis_normal_slope(gen);
-                    if (std::fabs(l) > parametr_of_slope) {
-                        l = (l > 0) ? parametr_of_slope : -parametr_of_slope;
+                    if (std::fabs(l) > 2 * sigma) {
+                        l = (l > 0) ? 2 * sigma : -2 * sigma;
                     }
                     slope += l;
                 }   
@@ -174,8 +174,8 @@ void read_planes(std::istream& is, std::list<Plane>& planes, bool is_change_shif
                     d += dis_uni_shift(gen);
                 } else {
                     double l = dis_normal_shift(gen);
-                    if (std::fabs(l) > parametr_of_shift) {
-                        l = (l > 0) ? parametr_of_shift : -parametr_of_shift;
+                    if (std::fabs(l) > 2 * sigma) {
+                        l = (l > 0) ? 2 * sigma : -2 * sigma;
                     }
                     d += l;
                 }   
@@ -192,7 +192,6 @@ void read_planes(std::istream& is, std::list<Plane>& planes, bool is_change_shif
 
         std::getline(is, line);
         std::getline(is, line);
-        ++counter;
     }
 }
  

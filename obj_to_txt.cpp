@@ -21,10 +21,16 @@ int main(int argc, char* argv[]) {
     std::string file_obj;
     std::string file_txt;
     std::string file_ply;
+    std::string file_ply_init;
+    std::string convert;
     boost::program_options::options_description desc("All options");
     desc.add_options()
         ("file_obj", boost::program_options::value<std::string>(&file_obj)
          -> default_value("poly.obj"), "file with 3d model in obj format")
+        ("file_ply_init", boost::program_options::value<std::string>(&file_ply_init)
+         -> default_value("file_ply_init"), "ply formatted file to write in txt format")
+        ("convert", boost::program_options::value<std::string>(&convert)
+         -> default_value("obj"), "obj or ply to txt")
         ("file_txt", boost::program_options::value<std::string>(&file_txt)
          -> default_value("poly.txt"), "output file in txt format")
         ("file_ply", boost::program_options::value<std::string>(&file_ply)
@@ -40,7 +46,11 @@ int main(int argc, char* argv[]) {
     }
 
     Polyhedron poly;
-    CGAL::IO::read_OBJ(file_obj, poly);
+    if(convert == "obj") {
+        CGAL::IO::read_OBJ(file_obj, poly);
+    } else {
+        CGAL::IO::read_PLY(file_ply_init, poly);
+    }
 
     std::ofstream of(file_txt);
     of << std::fixed << std::setprecision(12);
