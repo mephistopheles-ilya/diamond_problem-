@@ -21,6 +21,7 @@ typedef K::Plane_3                                          Plane;
 typedef K::Vector_3                                         Vector_3;
 typedef Polyhedron::Vertex_handle                           Vertex_handle;
 typedef Polyhedron::HalfedgeDS                              HalfedgeDS;
+typedef Polyhedron::Face_handle                             Face_handle;
 
 struct norm_face {
     Vector_3 unit_n;
@@ -42,6 +43,11 @@ public:
     void add_face(const std::vector<norm_face>& all_faces, size_t begin, size_t end) {
         for(size_t i = begin; i <= end; ++i) {
             faces.push_back(all_faces[i]);
+        }
+    }
+    void add_face(const std::map<Face_handle, norm_face>& all_faces) {
+        for(const auto& val: all_faces) {
+            faces.push_back(val.second);
         }
     }
 
@@ -119,38 +125,99 @@ int main(int argc, char* argv[]) {
     std::sort(norms.begin(), norms.end(), [](const norm_face& n1, const norm_face& n2)
             { return n1.unit_n.z() > n2.unit_n.z();});
     for(auto& el: norms) {
-        std::cerr << el.unit_n.z() << std::endl;
+        //std::cerr << el.unit_n.z() << std::endl;
     }
-    double max_pl_dis = 0, pl_dis = 0;
-    double max_mi_dis = 0, mi_dis = 0;
+
     size_t sz = norms.size(), start = 0, end = 0;
+
+    struct gap_helper {
+        size_t start = 0;
+        double gap = 0;
+    };
+
+    std::vector<gap_helper> gaps;
+    gaps.reserve(sz - 1);
+
     for(size_t i = 0; i < sz - 1; ++i) {
-        if (norms[i + 1].unit_n.z() > 0) {
-            pl_dis = norms[i].unit_n.z() - norms[i + 1].unit_n.z();
-            if (pl_dis > max_pl_dis) {
-                max_pl_dis = pl_dis;
-                start = i + 1;
-            }
-        }
-        if (norms[i].unit_n.z() < 0) {
-            mi_dis = norms[i].unit_n.z() - norms[i + 1].unit_n.z();
-            if (mi_dis > max_mi_dis) {
-                max_mi_dis = mi_dis;
-                end = i;
-            }
-        }
+        double gap = norms[i].unit_n.z() - norms[i + 1].unit_n.z();
+        gap_helper g{i, gap};
+        gaps.push_back(g);
     }
+
+
+    std::sort(gaps.begin(), gaps.end(), [](const gap_helper& l, const gap_helper& r) {
+            return l.gap > r.gap; });
+
+    if (gaps.size() < 2) {
+        std::cerr << "Not enough elements in vector of gaps" << std::endl;
+        return -1;
+    }
+
+    start = std::min(gaps[0].start, gaps[1].start);
+    end = std::max(gaps[0].start, gaps[1].start);
+    ++start;
+
+
     for(size_t i = start; i <= end; ++i) {
-        std::cout << norms[i].unit_n.z() << std::endl;
+        //std::cout << norms[i].unit_n.z() << std::endl;
     }
+
+    //std::vector<norm_face> up_rundist;
+    //std::vector<norm_face> low_rundist;
+
+    std::map<Face_handle, norm_face> up_rundist;
+    std::map<Face_handle, norm_face> low_rundist;
+
+
+    double z_start = norms[start].unit_n.z();
+    double z_end = norms[end].unit_n.z();
+    for(size_t i = start; i <= end; ++i) {
+        auto begin = norms[i].it->facet_begin();
+        for(size_t j = 0; j < norms[i].it->size(); ++j, ++begin) {
+            auto op_face = begin->opposite()->facet();
+            auto h = op_face->halfedge();
+            Vector_3 unit_v = CGAL::unit_normal(h->vertex()->point(), h->next()->vertex()->point()
+                    , h->next()->next()->vertex()->point());
+            norm_face nf{unit_v, op_face};
+            if (unit_v.z() > z_start) {
+                up_rundist.insert(std::pair(op_face, nf));
+            } 
+            if (unit_v.z() < z_end) {
+                low_rundist.insert(std::pair(op_face, nf));
+            }
+        }
+    }
+    std::cout << up_rundist.size() << std::endl;
+    std::cout << low_rundist.size() << std::endl;
+
+
     Polyhedron rundist;
     Build_triangle<HalfedgeDS> triangle;
     triangle.add_face(norms, start, end);
     rundist.delegate(triangle);
 
+    Polyhedron rundist_up;
+    Build_triangle<HalfedgeDS> triangle1;
+    triangle1.add_face(up_rundist);
+    rundist_up.delegate(triangle1);
+
+    Polyhedron rundist_low;
+    Build_triangle<HalfedgeDS> triangle2;
+    triangle2.add_face(low_rundist);
+    rundist_low.delegate(triangle2);
+
     std::ofstream of("rundist.ply");
     of << std::fixed << std::setprecision(12);
     CGAL::IO::write_PLY(of, rundist);
+
+    std::ofstream of1("rundist_up.ply");
+    of1 << std::fixed << std::setprecision(12);
+    CGAL::IO::write_PLY(of1, rundist_up);
+
+    std::ofstream of2("rundist_low.ply");
+    of2 << std::fixed << std::setprecision(12);
+    CGAL::IO::write_PLY(of2, rundist_low);
+
 
 
     return 0;
