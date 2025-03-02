@@ -1,8 +1,11 @@
 #include <iostream>
+#include <ostream>
 #include <vector>
 #include <map>
 #include <limits>
 #include <tuple>
+#include <unordered_set>
+#include <random>
 
 #include <boost/program_options.hpp>
 
@@ -22,10 +25,11 @@ typedef K::Plane_3                                          Plane;
 typedef K::Vector_3                                         Vector_3;
 typedef Polyhedron::Face_iterator                           Face_iterator; 
 typedef Polyhedron::Face_handle                             Face_handle;
+typedef Polyhedron::Vertex_handle                           Vertex_handle;
 
 
 
-bool read_planes_from_file(std::vector<Plane> planes, std::string filename
+bool read_planes_from_file(std::vector<Plane>& planes, std::string filename
         , std::string start = "indices_of_vertices"
         , std::string stop = "#") {
 
@@ -115,14 +119,14 @@ void find_rundist_and_other_parts(std::vector<std::pair<Plane, Face_iterator>>& 
         }
     }
 
-    auto end = planes_its.begin() + begin;
+    auto end = planes_its.begin() + begin + 1;
     for(auto begin = planes_its.begin(); begin != end; ++begin) {
         if(auto it = up_rundist.find(begin->second); it == up_rundist.end()) {
             up_up_rundist_planes_its.push_back(*begin);
         }
     }
     end = planes_its.end();
-    for(auto begin = planes_its.begin() + before_end + 1; begin != end && begin->first.c() > z_start; ++begin) {
+    for(auto begin = planes_its.begin() + before_end + 1; begin != end; ++begin) {
         if(auto it = low_rundist.find(begin->second); it == low_rundist.end()) {
             low_low_rundist_planes_its.push_back(*begin);
         }
@@ -173,7 +177,7 @@ double calc_height(std::vector<std::pair<Plane, Face_iterator>>& v1
 
 void get_plane_equations_from_polyhedron(Polyhedron& input_poly
             , std::vector<std::pair<Plane, Face_iterator>>& planes_its) {
-    auto end = input_poly.facets_begin();
+    auto end = input_poly.facets_end();
     for(auto it = input_poly.facets_begin(); it != end; ++it) {
         auto h = it->halfedge();
         Point_3 p1 = h->vertex()->point();
@@ -186,6 +190,25 @@ void get_plane_equations_from_polyhedron(Polyhedron& input_poly
     }
 }
 
+#define _DTOR_   0.0174532925199432957692         //  PI / 180
+inline double Rad2Deg(double a) { return a / _DTOR_; }
+inline double Deg2Rad(double a) { return a * _DTOR_; }
+ 
+double Azimuth(const Point_3& v) {
+    double a = atan2(v.x(), v.y());
+    return (a >= 0) ? a : a + 2*M_PI;
+}
+
+double Slope(const Point_3 &v) {
+    double d = sqrt(v.x()*v.x() + v.y()*v.y());
+    return atan2(v.z(), d);
+}
+
+Point_3 VectorFrom(double azimuth, double slope, double length) {
+    double c = cos(slope);
+    Point_3 v(length*sin(azimuth)*c, length*cos(azimuth)*c, length*sin(slope));
+    return v;
+}
 
 
 
@@ -209,7 +232,9 @@ int main(int argc, char* argv[]) {
     bool is_change_pavilion;
     bool is_change_rundist;
     std::string distribution;
-    double sigma;
+    double sigma_shift;
+    double sigma_azimuth;
+    double sigma_slope;
     boost::program_options::options_description desc("All options");
     desc.add_options()
         ("input_file", boost::program_options::value<std::string>(&input_file) 
@@ -219,7 +244,7 @@ int main(int argc, char* argv[]) {
         ("output_file", boost::program_options::value<std::string>(&output_file)
          -> default_value("model_out.ply"), "file to save model in specila format")
         ("type_of_output_file", boost::program_options::value<std::string>(&type_of_output_file) 
-         -> default_value("ply"), "txt, ply or obj")
+         -> default_value("ply"), "ply or obj")
 
         ("is_change_shift", boost::program_options::value<bool>(&is_change_shift)
          -> default_value(false), "do you want to shift a parametr d")
@@ -235,25 +260,29 @@ int main(int argc, char* argv[]) {
         ("parametr_of_shift", boost::program_options::value<double>(&parametr_of_shift)
          -> default_value(0.0001), " d += parametr_of_shift")
         ("parametr_of_azimuth", boost::program_options::value<double>(&parametr_of_azimuth)
-         -> default_value(0.0001), " azimuth += parametr_of_azimuth")
+         -> default_value(1), " azimuth += parametr_of_azimuth (in degrees)")
         ("parametr_of_slope", boost::program_options::value<double>(&parametr_of_slope)
-         -> default_value(0.0001), " slope += parametr_of_slope")
+         -> default_value(1), " slope += parametr_of_slope (in degrees)")
         ("parametr_of_height_crown", boost::program_options::value<double>(&parametr_of_height_crown)
          -> default_value(105), " percents of height of an old height")
         ("parametr_of_height_pavilion", boost::program_options::value<double>(&parametr_of_height_pavilion)
          -> default_value(105), " percents of height of an old height")
 
         ("is_change_crown", boost::program_options::value<bool>(&is_change_crown)
-         -> default_value("false"), "do you want to apply changes to crown")
+         -> default_value(false), "do you want to apply changes to crown")
         ("is_change_pavilion", boost::program_options::value<bool>(&is_change_pavilion)
-         -> default_value("false"), "do you want to apply changes to pavilion")
+         -> default_value(false), "do you want to apply changes to pavilion")
         ("is_change_rundist", boost::program_options::value<bool>(&is_change_rundist)
-         -> default_value("false"), "do you want to apply changes to rundist")
+         -> default_value(false), "do you want to apply changes to rundist")
 
         ("distribution", boost::program_options::value<std::string>(&distribution)
          -> default_value("uniform"), "uniform or normal")
-        ("sigma", boost::program_options::value<double>(&sigma)
-         -> default_value(0.0001), "dispersion in normal distribution")
+        ("sigma_shift", boost::program_options::value<double>(&sigma_shift)
+         -> default_value(0.0001), "dispersion in normal distribution for shift")
+        ("sigma_azimuth", boost::program_options::value<double>(&sigma_azimuth)
+         -> default_value(1), "dispersion in normal distribution for azimuth (in derees)")
+        ("sigma_slope", boost::program_options::value<double>(&sigma_slope)
+         -> default_value(1), "dispersion in normal distribution for slope (in degrees)")
 
         ("help", "produce help message")
         ;
@@ -264,6 +293,10 @@ int main(int argc, char* argv[]) {
         std::cout << desc << "\n";
         return 1;
     }
+    sigma_azimuth = Deg2Rad(sigma_azimuth);
+    sigma_slope = Deg2Rad(sigma_slope);
+    parametr_of_azimuth = Deg2Rad(parametr_of_azimuth);
+    parametr_of_slope = Deg2Rad(parametr_of_slope);
 
     Polyhedron input_poly;
     std::vector<std::pair<Plane, Face_iterator>> planes_its;
@@ -285,7 +318,7 @@ int main(int argc, char* argv[]) {
         }
         get_plane_equations_from_polyhedron(input_poly, planes_its);
 
-    } else if (type_of_output_file == "txt") {
+    } else if (type_of_input_file == "txt") {
         std::vector<Plane> planes;
         succes = read_planes_from_file(planes, input_file);
         if (succes == false) {
@@ -294,9 +327,12 @@ int main(int argc, char* argv[]) {
         }
         CGAL::halfspace_intersection_with_constructions_3(planes.begin(), planes.end(), input_poly); 
         get_plane_equations_from_polyhedron(input_poly, planes_its);
+    } else {
+        std::cerr << "Wrong type of file" << std::endl;
+        return -1;
     }
-
     std::vector<std::pair<Plane, Face_iterator>> rundist_planes_its;
+    //TODO store not Point_3 but vertex handle to work correctly in cituation of one point in rundist
     std::vector<std::tuple<Plane, Face_iterator, Point_3, Point_3>> up_rundist_palnes_its;
     std::vector<std::pair<Plane, Face_iterator>> up_up_rundist_palnes_its;
     std::vector<std::tuple<Plane, Face_iterator, Point_3, Point_3>> low_rundist_palnes_its;
@@ -305,15 +341,363 @@ int main(int argc, char* argv[]) {
     find_rundist_and_other_parts(planes_its, rundist_planes_its, up_rundist_palnes_its
             , up_up_rundist_palnes_its, low_rundist_palnes_its, low_low_rundist_palnes_its);
 
+
+    std::unordered_set<Vertex_handle> rundist_vertices;
+    for(auto& el: rundist_planes_its) {
+        auto begin = el.second->facet_begin();
+        size_t sz = el.second->size();
+        for(size_t i = 0; i < sz; ++i, ++begin) {
+            rundist_vertices.insert(begin->vertex());
+        }
+    }
+
    
     double height_pavilion = 0, height_crown =0;
 
     height_pavilion = calc_height(up_up_rundist_palnes_its, up_rundist_palnes_its);
     height_crown = calc_height(low_low_rundist_palnes_its, low_rundist_palnes_its);
 
-    if (is_change_pavilion == true) {
-        if (is_change_height_pavilion == true) {
-            for(auto& el: up_rundist_palnes_its) {
+    if (is_change_height_pavilion == true) {
+        double delta = height_pavilion * (parametr_of_height_pavilion/100 - 1);
+        for(auto& el: up_rundist_palnes_its) {
+            Point_3 p1(0, 0, 0);
+            auto begin = std::get<1>(el)->facet_begin();
+            size_t sz = std::get<1>(el)->size();
+            for(size_t i = 0; i < sz; ++i, ++begin) {
+                auto vh = begin->vertex();
+                if (auto it = rundist_vertices.find(vh); it == rundist_vertices.end()) {
+                    p1 = vh->point();
+                    break;
+                }
+            }
+            Point_3 p2 = std::get<2>(el);
+            Point_3 p3 = std::get<3>(el);
+            p1 = Point_3(p1.x(), p1.y(), p1.z() + delta);
+            Plane plane(p2, p3, p1);
+            double norm = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
+            Plane norm_plane(plane.a()/norm, plane.b()/norm, plane.c()/norm, plane.d()/norm);
+            std::get<0>(el) = norm_plane;
+        }
+        for(auto& el: up_up_rundist_palnes_its) {
+            auto h = el.second->halfedge();
+            Point_3 p1 = h->vertex()->point();
+            Point_3 p2 = h->next()->vertex()->point();
+            Point_3 p3 = h->next()->next()->vertex()->point();
+            p1 = Point_3(p1.x(), p1.y(), p1.z() + delta);
+            p2 = Point_3(p2.x(), p2.y(), p2.z() + delta);
+            p3 = Point_3(p3.x(), p3.y(), p3.z() + delta);
+            Plane plane(p1, p2, p3);
+            double norm = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
+            Plane norm_plane(plane.a()/norm, plane.b()/norm, plane.c()/norm, plane.d()/norm);
+            el.first = norm_plane;
+        }
+    }
+
+    if (is_change_height_crown == true) {
+        double delta = height_crown * (parametr_of_height_crown/100 - 1);
+        for(auto& el: low_rundist_palnes_its) {
+            Point_3 p1(0, 0, 0);
+            auto begin = std::get<1>(el)->facet_begin();
+            size_t sz = std::get<1>(el)->size();
+            for(size_t i = 0; i < sz; ++i, ++begin) {
+                auto vh = begin->vertex();
+                if (auto it = rundist_vertices.find(vh); it == rundist_vertices.end()) {
+                    p1 = vh->point();
+                    break;
+                }
+            }
+            Point_3 p2 = std::get<2>(el);
+            Point_3 p3 = std::get<3>(el);
+            p1 = Point_3(p1.x(), p1.y(), p1.z() - delta);
+            Plane plane(p2, p3, p1);
+            double norm = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
+            Plane norm_plane(plane.a()/norm, plane.b()/norm, plane.c()/norm, plane.d()/norm);
+            std::get<0>(el) = norm_plane;
+        }
+        for(auto& el: low_low_rundist_palnes_its) {
+            auto h = el.second->halfedge();
+            Point_3 p1 = h->vertex()->point();
+            Point_3 p2 = h->next()->vertex()->point();
+            Point_3 p3 = h->next()->next()->vertex()->point();
+            p1 = Point_3(p1.x(), p1.y(), p1.z() - delta);
+            p2 = Point_3(p2.x(), p2.y(), p2.z() - delta);
+            p3 = Point_3(p3.x(), p3.y(), p3.z() - delta);
+            Plane plane(p1, p2, p3);
+            double norm = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
+            Plane norm_plane(plane.a()/norm, plane.b()/norm, plane.c()/norm, plane.d()/norm);
+            el.first = norm_plane;
+        }
+    }
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dis_uni_azimuth(-parametr_of_azimuth, parametr_of_azimuth);
+    std::uniform_real_distribution<> dis_uni_slope(-parametr_of_slope, parametr_of_slope);
+    std::uniform_real_distribution<> dis_uni_shift(-parametr_of_shift, parametr_of_shift);
+    std::normal_distribution<> dis_normal_shift(0, sigma_shift);
+    std::normal_distribution<> dis_normal_slope(0, sigma_slope);
+    std::normal_distribution<> dis_normal_azimuth(0, sigma_azimuth);
+
+
+    srand(time(NULL));
+    if(is_change_pavilion == true) {
+        for(auto& el: up_rundist_palnes_its) {
+            Plane plane = std::get<0>(el);
+            Point_3 vec(plane.a(), plane.b(), plane.c());
+            double d = plane.d();
+            double azimuth = Azimuth(vec);
+            double slope = Slope(vec);
+            if (is_change_azimuth == true) {
+                if (distribution == "uniform") {
+                    azimuth += dis_uni_azimuth(gen);
+                } else {
+                    double l = dis_normal_azimuth(gen);
+                    if (std::fabs(l) > 2 * sigma_azimuth) {
+                        l = (l > 0) ? 2 * sigma_azimuth : -2 * sigma_azimuth;
+                    }
+                    azimuth += l;
+                }   
+            }
+            if (is_change_slope == true) {
+                if (distribution == "uniform") {
+                    slope += dis_uni_slope(gen);
+                } else {
+                    double l = dis_normal_slope(gen);
+                    if (std::fabs(l) > 2 * sigma_slope) {
+                        l = (l > 0) ? 2 * sigma_slope : -2 * sigma_slope;
+                    }
+                    slope += l;
+                }   
+            }
+            vec = VectorFrom(azimuth, slope, 1);
+            if (is_change_shift == true) {
+                if (distribution == "uniform") {
+                    d += dis_uni_shift(gen);
+                } else {
+                    double l = dis_normal_shift(gen);
+                    if (std::fabs(l) > 2 * sigma_shift) {
+                        l = (l > 0) ? 2 * sigma_shift : -2 * sigma_shift;
+                    }
+                    d += l;
+                }
+            }
+            Plane plane_new(vec.x(), vec.y(), vec.z(), d);
+            std::get<0>(el) = plane_new;
+        }
+        for(auto& el: up_up_rundist_palnes_its) {
+            Plane plane = el.first;
+            Point_3 vec(plane.a(), plane.b(), plane.c());
+            double d = plane.d();
+            double azimuth = Azimuth(vec);
+            double slope = Slope(vec);
+            if (is_change_azimuth == true) {
+                if (distribution == "uniform") {
+                    azimuth += dis_uni_azimuth(gen);
+                } else {
+                    double l = dis_normal_azimuth(gen);
+                    if (std::fabs(l) > 2 * sigma_azimuth) {
+                        l = (l > 0) ? 2 * sigma_azimuth : -2 * sigma_azimuth;
+                    }
+                    azimuth += l;
+                }   
+            }
+            if (is_change_slope == true) {
+                if (distribution == "uniform") {
+                    slope += dis_uni_slope(gen);
+                } else {
+                    double l = dis_normal_slope(gen);
+                    if (std::fabs(l) > 2 * sigma_slope) {
+                        l = (l > 0) ? 2 * sigma_slope : -2 * sigma_slope;
+                    }
+                    slope += l;
+                }   
+            }
+            vec = VectorFrom(azimuth, slope, 1);
+            if (is_change_shift == true) {
+                if (distribution == "uniform") {
+                    d += dis_uni_shift(gen);
+                } else {
+                    double l = dis_normal_shift(gen);
+                    if (std::fabs(l) > 2 * sigma_shift) {
+                        l = (l > 0) ? 2 * sigma_shift : -2 * sigma_shift;
+                    }
+                    d += l;
+                }
+            }
+            Plane plane_new(vec.x(), vec.y(), vec.z(), d);
+            el.first = plane_new;
+        }
+    }
+
+    if(is_change_crown == true) {
+        for(auto& el: low_rundist_palnes_its) {
+            Plane plane = std::get<0>(el);
+            Point_3 vec(plane.a(), plane.b(), plane.c());
+            double d = plane.d();
+            double azimuth = Azimuth(vec);
+            double slope = Slope(vec);
+            if (is_change_azimuth == true) {
+                if (distribution == "uniform") {
+                    azimuth += dis_uni_azimuth(gen);
+                } else {
+                    double l = dis_normal_azimuth(gen);
+                    if (std::fabs(l) > 2 * sigma_azimuth) {
+                        l = (l > 0) ? 2 * sigma_azimuth : -2 * sigma_azimuth;
+                    }
+                    azimuth += l;
+                }   
+            }
+            if (is_change_slope == true) {
+                if (distribution == "uniform") {
+                    slope += dis_uni_slope(gen);
+                } else {
+                    double l = dis_normal_slope(gen);
+                    if (std::fabs(l) > 2 * sigma_slope) {
+                        l = (l > 0) ? 2 * sigma_slope : -2 * sigma_slope;
+                    }
+                    slope += l;
+                }   
+            }
+            vec = VectorFrom(azimuth, slope, 1);
+            if (is_change_shift == true) {
+                if (distribution == "uniform") {
+                    d += dis_uni_shift(gen);
+                } else {
+                    double l = dis_normal_shift(gen);
+                    if (std::fabs(l) > 2 * sigma_shift) {
+                        l = (l > 0) ? 2 * sigma_shift : -2 * sigma_shift;
+                    }
+                    d += l;
+                }
+            }
+            Plane plane_new(vec.x(), vec.y(), vec.z(), d);
+            std::get<0>(el) = plane_new;
+
+        }
+        for(auto& el: low_low_rundist_palnes_its) {
+            Plane plane = el.first;
+            Point_3 vec(plane.a(), plane.b(), plane.c());
+            double d = plane.d();
+            double azimuth = Azimuth(vec);
+            double slope = Slope(vec);
+            if (is_change_azimuth == true) {
+                if (distribution == "uniform") {
+                    azimuth += dis_uni_azimuth(gen);
+                } else {
+                    double l = dis_normal_azimuth(gen);
+                    if (std::fabs(l) > 2 * sigma_azimuth) {
+                        l = (l > 0) ? 2 * sigma_azimuth : -2 * sigma_azimuth;
+                    }
+                    azimuth += l;
+                }   
+            }
+            if (is_change_slope == true) {
+                if (distribution == "uniform") {
+                    slope += dis_uni_slope(gen);
+                } else {
+                    double l = dis_normal_slope(gen);
+                    if (std::fabs(l) > 2 * sigma_slope) {
+                        l = (l > 0) ? 2 * sigma_slope : -2 * sigma_slope;
+                    }
+                    slope += l;
+                }   
+            }
+            vec = VectorFrom(azimuth, slope, 1);
+            if (is_change_shift == true) {
+                if (distribution == "uniform") {
+                    d += dis_uni_shift(gen);
+                } else {
+                    double l = dis_normal_shift(gen);
+                    if (std::fabs(l) > 2 * sigma_shift) {
+                        l = (l > 0) ? 2 * sigma_shift : -2 * sigma_shift;
+                    }
+                    d += l;
+                }
+            }
+            Plane plane_new(vec.x(), vec.y(), vec.z(), d);
+            el.first = plane_new;
+        }
+    }
+
+    if(is_change_rundist == true) {
+        for(auto& el: rundist_planes_its) {
+            Plane plane = el.first;
+            Point_3 vec(plane.a(), plane.b(), plane.c());
+            double d = plane.d();
+            double azimuth = Azimuth(vec);
+            double slope = Slope(vec);
+            if (is_change_azimuth == true) {
+                if (distribution == "uniform") {
+                    azimuth += dis_uni_azimuth(gen);
+                } else {
+                    double l = dis_normal_azimuth(gen);
+                    if (std::fabs(l) > 2 * sigma_azimuth) {
+                        l = (l > 0) ? 2 * sigma_azimuth : -2 * sigma_azimuth;
+                    }
+                    azimuth += l;
+                }   
+            }
+            if (is_change_slope == true) {
+                if (distribution == "uniform") {
+                    slope += dis_uni_slope(gen);
+                } else {
+                    double l = dis_normal_slope(gen);
+                    if (std::fabs(l) > 2 * sigma_slope) {
+                        l = (l > 0) ? 2 * sigma_slope : -2 * sigma_slope;
+                    }
+                    slope += l;
+                }   
+            }
+            vec = VectorFrom(azimuth, slope, 1);
+            if (is_change_shift == true) {
+                if (distribution == "uniform") {
+                    d += dis_uni_shift(gen);
+                } else {
+                    double l = dis_normal_shift(gen);
+                    if (std::fabs(l) > 2 * sigma_shift) {
+                        l = (l > 0) ? 2 * sigma_shift : -2 * sigma_shift;
+                    }
+                    d += l;
+                }
+            }
+            Plane plane_new(vec.x(), vec.y(), vec.z(), d);
+            el.first = plane_new;
+        }
+    }
+
+    std::vector<Plane> planes;
+    for(auto& el: up_up_rundist_palnes_its) {
+        planes.push_back(el.first);
+    }
+    for(auto& el: up_rundist_palnes_its) {
+        planes.push_back(std::get<0>(el));
+    }
+    for(auto& el: rundist_planes_its) {
+        planes.push_back(el.first);
+    }
+    for(auto& el: low_rundist_palnes_its) {
+        planes.push_back(std::get<0>(el));
+    }
+    for(auto& el: low_low_rundist_palnes_its) {
+        planes.push_back(el.first);
+    }
+    
+    Polyhedron output_poly;
+    CGAL::halfspace_intersection_with_constructions_3(planes.begin(), planes.end(), output_poly); 
+
+    if (type_of_output_file == "ply") {
+        std::ofstream of1(output_file);
+        of1 << std::fixed << std::setprecision(12);
+        CGAL::IO::write_PLY(of1, output_poly);
+    } else if (type_of_output_file == "obj") {
+        std::ofstream of2(output_file);
+        of2 << std::fixed << std::setprecision(12);
+        CGAL::IO::write_OBJ(of2, output_poly);
+    }
+
+    return 0;
+}
+
 
 
 
