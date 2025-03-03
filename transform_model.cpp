@@ -332,7 +332,6 @@ int main(int argc, char* argv[]) {
         return -1;
     }
     std::vector<std::pair<Plane, Face_iterator>> rundist_planes_its;
-    //TODO store not Point_3 but vertex handle to work correctly in cituation of one point in rundist
     std::vector<std::tuple<Plane, Face_iterator, Point_3, Point_3>> up_rundist_palnes_its;
     std::vector<std::pair<Plane, Face_iterator>> up_up_rundist_palnes_its;
     std::vector<std::tuple<Plane, Face_iterator, Point_3, Point_3>> low_rundist_palnes_its;
@@ -357,26 +356,46 @@ int main(int argc, char* argv[]) {
     height_pavilion = calc_height(up_up_rundist_palnes_its, up_rundist_palnes_its);
     height_crown = calc_height(low_low_rundist_palnes_its, low_rundist_palnes_its);
 
+    std::vector<Plane> planes;
+
     if (is_change_height_pavilion == true) {
         double delta = height_pavilion * (parametr_of_height_pavilion/100 - 1);
         for(auto& el: up_rundist_palnes_its) {
-            Point_3 p1(0, 0, 0);
+            std::vector<Point_3> part_of_rundist;
+            std::vector<Point_3> not_rundist;
             auto begin = std::get<1>(el)->facet_begin();
+            auto vh = begin->vertex();
+            if (auto it = rundist_vertices.find(vh); it != rundist_vertices.end()) {
+                auto end = rundist_vertices.end();
+                while(it != end) {
+                    ++begin;
+                    vh = begin->vertex();
+                    it = rundist_vertices.find(vh);
+                }
+            }
             size_t sz = std::get<1>(el)->size();
             for(size_t i = 0; i < sz; ++i, ++begin) {
                 auto vh = begin->vertex();
-                if (auto it = rundist_vertices.find(vh); it == rundist_vertices.end()) {
-                    p1 = vh->point();
-                    break;
+                if (auto it = rundist_vertices.find(vh); it != rundist_vertices.end()) {
+                    part_of_rundist.push_back(vh->point());
+                } else {
+                    not_rundist.push_back(vh->point());
                 }
             }
-            Point_3 p2 = std::get<2>(el);
-            Point_3 p3 = std::get<3>(el);
-            p1 = Point_3(p1.x(), p1.y(), p1.z() + delta);
-            Plane plane(p2, p3, p1);
-            double norm = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
-            Plane norm_plane(plane.a()/norm, plane.b()/norm, plane.c()/norm, plane.d()/norm);
-            std::get<0>(el) = norm_plane;
+
+            size_t sz1 = part_of_rundist.size(), sz2 = not_rundist.size();
+            for(size_t i = 0; i < sz1 - 1; ++i) {
+                Point_3 p1 = part_of_rundist[i];
+                Point_3 p2 = part_of_rundist[i + 1];
+                for(size_t j = 0; j < sz2; ++j) {
+                    Point_3 p3 = not_rundist[j];
+                    p3 = Point_3(p3.x(), p3.y(), p3.z() + delta);
+                    Plane plane(p3, p1, p2);
+                    double norm = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
+                    Plane norm_plane(plane.a()/norm, plane.b()/norm, plane.c()/norm, plane.d()/norm);
+                    planes.push_back(norm_plane);
+                }
+            }
         }
         for(auto& el: up_up_rundist_palnes_its) {
             auto h = el.second->halfedge();
@@ -395,24 +414,44 @@ int main(int argc, char* argv[]) {
 
     if (is_change_height_crown == true) {
         double delta = height_crown * (parametr_of_height_crown/100 - 1);
+        std::cout << delta << std::endl;
         for(auto& el: low_rundist_palnes_its) {
-            Point_3 p1(0, 0, 0);
+            std::vector<Point_3> part_of_rundist;
+            std::vector<Point_3> not_rundist;
             auto begin = std::get<1>(el)->facet_begin();
+            auto vh = begin->vertex();
+            if (auto it = rundist_vertices.find(vh); it != rundist_vertices.end()) {
+                auto end = rundist_vertices.end();
+                while(it != end) {
+                    ++begin;
+                    vh = begin->vertex();
+                    it = rundist_vertices.find(vh);
+                }
+            }
             size_t sz = std::get<1>(el)->size();
             for(size_t i = 0; i < sz; ++i, ++begin) {
                 auto vh = begin->vertex();
-                if (auto it = rundist_vertices.find(vh); it == rundist_vertices.end()) {
-                    p1 = vh->point();
-                    break;
+                if (auto it = rundist_vertices.find(vh); it != rundist_vertices.end()) {
+                    part_of_rundist.push_back(vh->point());
+                } else {
+                    not_rundist.push_back(vh->point());
                 }
             }
-            Point_3 p2 = std::get<2>(el);
-            Point_3 p3 = std::get<3>(el);
-            p1 = Point_3(p1.x(), p1.y(), p1.z() - delta);
-            Plane plane(p2, p3, p1);
-            double norm = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
-            Plane norm_plane(plane.a()/norm, plane.b()/norm, plane.c()/norm, plane.d()/norm);
-            std::get<0>(el) = norm_plane;
+
+            size_t sz1 = part_of_rundist.size(), sz2 = not_rundist.size();
+            for(size_t i = 0; i < sz1 - 1; ++i) {
+                Point_3 p1 = part_of_rundist[i];
+                Point_3 p2 = part_of_rundist[i + 1];
+                for(size_t j = 0; j < sz2; ++j) {
+                    Point_3 p3 = not_rundist[j];
+                    p3 = Point_3(p3.x(), p3.y(), p3.z() - delta);
+                    std::cout << p3.z() << std::endl;
+                    Plane plane(p3, p1, p2);
+                    double norm = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
+                    Plane norm_plane(plane.a()/norm, plane.b()/norm, plane.c()/norm, plane.d()/norm);
+                    planes.push_back(norm_plane);
+                }
+            }
         }
         for(auto& el: low_low_rundist_palnes_its) {
             auto h = el.second->halfedge();
@@ -665,18 +704,21 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    std::vector<Plane> planes;
     for(auto& el: up_up_rundist_palnes_its) {
         planes.push_back(el.first);
     }
-    for(auto& el: up_rundist_palnes_its) {
-        planes.push_back(std::get<0>(el));
+    if (is_change_height_pavilion == false) {
+        for(auto& el: up_rundist_palnes_its) {
+            planes.push_back(std::get<0>(el));
+        }
     }
     for(auto& el: rundist_planes_its) {
         planes.push_back(el.first);
     }
-    for(auto& el: low_rundist_palnes_its) {
-        planes.push_back(std::get<0>(el));
+    if (is_change_height_crown == false) {
+        for(auto& el: low_rundist_palnes_its) {
+            planes.push_back(std::get<0>(el));
+        }
     }
     for(auto& el: low_low_rundist_palnes_its) {
         planes.push_back(el.first);
