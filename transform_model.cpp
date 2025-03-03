@@ -15,6 +15,9 @@
 #include <CGAL/boost/graph/IO/OBJ.h>
 #include <CGAL/Surface_mesh.h>
 #include <CGAL/Convex_hull_3/dual/halfspace_intersection_with_constructions_3.h>
+#include <CGAL/convex_hull_3.h>
+#include <CGAL/Kernel/global_functions.h>
+#include <CGAL/Polyhedron_incremental_builder_3.h>
 
 
 
@@ -26,20 +29,63 @@ typedef K::Vector_3                                         Vector_3;
 typedef Polyhedron::Face_iterator                           Face_iterator; 
 typedef Polyhedron::Face_handle                             Face_handle;
 typedef Polyhedron::Vertex_handle                           Vertex_handle;
+typedef Polyhedron::HalfedgeDS                              HalfedgeDS;
 
+
+template <class HDS>
+class Build_triangle : public CGAL::Modifier_base<HDS> {
+public:
+    std::vector<Face_iterator> faces;
+    Build_triangle() {}
+    void add_face(const std::vector<std::pair<Vector_3, Face_iterator>>& all_faces, size_t begin, size_t end) {
+        for(size_t i = begin; i < end; ++i) {
+            faces.push_back(all_faces[i].second);
+        }
+    }
+    void operator()( HDS& hds) {
+        CGAL::Polyhedron_incremental_builder_3<HDS> B( hds, true);
+        std::map<Vertex_handle, size_t> vertex_map;
+        size_t vertex_index = 0;
+        for(auto& face: faces) {
+            auto begin = face->facet_begin();
+            size_t num = face->size();
+            for(size_t i = 0; i < num; ++i, ++begin) {
+                if (vertex_map.find(begin->vertex()) == vertex_map.end()) {
+                    vertex_map[begin->vertex()] = vertex_index;
+                    ++vertex_index;
+                }
+            }
+        }
+        B.begin_surface(vertex_map.size(), faces.size(), vertex_map.size(), 1);
+        std::vector<std::pair<Vertex_handle, size_t>> v;
+        std::copy(vertex_map.begin(), vertex_map.end(), std::back_inserter(v));
+        std::sort(v.begin(), v.end(), [](const std::pair<Vertex_handle, size_t>& a
+                    , const std::pair<Vertex_handle, size_t>& b) { return a.second < b.second;});
+        for(const auto& el: v) {
+            B.add_vertex(el.first->point());
+        }
+        for(auto& face: faces) {
+            B.begin_facet();
+            auto begin = face->facet_begin();
+            size_t num = face->size();
+            for(size_t i = 0; i < num; ++i, ++begin) {
+                B.add_vertex_to_facet(vertex_map[begin->vertex()]);
+            }
+            B.end_facet();
+        }
+        B.end_surface();
+    }
+};
 
 
 bool read_planes_from_file(std::vector<Plane>& planes, std::string filename
         , std::string start = "indices_of_vertices"
         , std::string stop = "#") {
-
     std::ifstream in(filename);
-
     if (in.is_open() == false) {
         std::cerr << "Canot open file: " << filename << std::endl;
         return false;
     }
-
     std::string line;
     for(;;) {
         std::getline(in, line);
@@ -61,12 +107,10 @@ bool read_planes_from_file(std::vector<Plane>& planes, std::string filename
     return true;
 }
 
-void find_rundist_and_other_parts(std::vector<std::pair<Plane, Face_iterator>>& planes_its
+void find_rundist_up_low(std::vector<std::pair<Plane, Face_iterator>>& planes_its
         , std::vector<std::pair<Plane, Face_iterator>>& rundist_planes_its
-        , std::vector<std::tuple<Plane, Face_iterator, Point_3, Point_3>>& up_rundist_planes_its
-        , std::vector<std::pair<Plane, Face_iterator>>& up_up_rundist_planes_its
-        , std::vector<std::tuple<Plane, Face_iterator, Point_3, Point_3>>& low_rundist_planes_its
-        , std::vector<std::pair<Plane, Face_iterator>>& low_low_rundist_planes_its
+        , std::vector<std::pair<Plane, Face_iterator>>& up_rundist_planes_its
+        , std::vector<std::pair<Plane, Face_iterator>>& low_rundist_planes_its
         ) {
     std::sort(planes_its.begin(), planes_its.end(), [](const std::pair<Plane, Face_iterator>& p1
                 , const std::pair<Plane, Face_iterator>& p2)
@@ -91,59 +135,26 @@ void find_rundist_and_other_parts(std::vector<std::pair<Plane, Face_iterator>>& 
     ++begin;
     std::copy(planes_its.begin() + begin, planes_its.begin() + before_end + 1, std::back_inserter(rundist_planes_its));
 
-    std::map<Face_handle, std::tuple<Plane, Face_iterator, Point_3, Point_3>> up_rundist;
-    std::map<Face_handle, std::tuple<Plane, Face_iterator, Point_3, Point_3>> low_rundist;
-
 
     double z_start = rundist_planes_its.begin()->first.c();
     double z_end = std::prev(rundist_planes_its.end())->first.c();
-    for(auto& el: rundist_planes_its) {
-        auto begin = el.second->facet_begin();
-        size_t sz = el.second->size(); 
-        for(size_t j = 0; j < sz; ++j, ++begin) {
-            Point_3 p1 = begin->vertex()->point();
-            Point_3 p2 = begin->opposite()->vertex()->point();
-            auto op_face = begin->opposite()->facet();
-            auto h = op_face->halfedge();
-            Plane plane = Plane(h->vertex()->point(), h->next()->vertex()->point()
-                    , h->next()->next()->vertex()->point());
-            double norm = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
-            Plane norm_plane(plane.a()/norm, plane.b()/norm, plane.c()/norm, plane.d()/norm);
-            std::tuple<Plane, Face_iterator, Point_3, Point_3> p(norm_plane, op_face, p1, p2);
-            if (norm_plane.c() > z_start) {
-                up_rundist.insert(std::pair(op_face, p));
-            } 
-            if (norm_plane.c() < z_end) {
-                low_rundist.insert(std::pair(op_face, p));
-            }
+    for(auto& el: planes_its) {
+        auto h = el.second->halfedge();
+        Point_3 p1 = h->vertex()->point();
+        Point_3 p2 = h->next()->vertex()->point();
+        Point_3 p3 = h->next()->next()->vertex()->point();
+        Vector_3 unit_n = CGAL::unit_normal(p1, p2, p3);
+        if (unit_n.z() > z_start) {
+            up_rundist_planes_its.push_back(el);
+        } else if (unit_n.z() < z_end) {
+            low_rundist_planes_its.push_back(el);
         }
-    }
-
-    auto end = planes_its.begin() + begin + 1;
-    for(auto begin = planes_its.begin(); begin != end; ++begin) {
-        if(auto it = up_rundist.find(begin->second); it == up_rundist.end()) {
-            up_up_rundist_planes_its.push_back(*begin);
-        }
-    }
-    end = planes_its.end();
-    for(auto begin = planes_its.begin() + before_end + 1; begin != end; ++begin) {
-        if(auto it = low_rundist.find(begin->second); it == low_rundist.end()) {
-            low_low_rundist_planes_its.push_back(*begin);
-        }
-    }
-
-    for(auto& el: up_rundist) {
-        up_rundist_planes_its.push_back(el.second);
-    }
-    for(auto& el: low_rundist) {
-        low_rundist_planes_its.push_back(el.second);
     }
 
     return;
 }
 
-double calc_height(std::vector<std::pair<Plane, Face_iterator>>& v1
-        , std::vector<std::tuple<Plane, Face_iterator, Point_3, Point_3>>& v2) {
+double calc_height(std::vector<std::pair<Plane, Face_iterator>>& v1) {
     double min_z = std::numeric_limits<double>::max();
     double max_z = std::numeric_limits<double>::min();
     for(auto& el: v1) {
@@ -159,21 +170,16 @@ double calc_height(std::vector<std::pair<Plane, Face_iterator>>& v1
             }
         }
     }
-    for(auto& el: v2) {
-        auto begin = std::get<1>(el)->facet_begin();
-        size_t sz = std::get<1>(el)->size();
-        for(size_t i = 0; i < sz; ++i, ++begin) {
-            double z = begin->vertex()->point().z();
-            if (z < min_z) {
-                min_z = z;
-            }
-            if (z > max_z) {
-                max_z = z;
-            }
-        }
-    }
     return max_z - min_z;
 }
+
+inline Plane unit_plane_equation(Point_3 p1, Point_3 p2, Point_3 p3) {
+    Plane plane(p1, p2, p3);
+    double norm = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
+    Plane norm_plane(plane.a()/norm, plane.b()/norm, plane.c()/norm, plane.d()/norm);
+    return norm_plane;
+}
+
 
 void get_plane_equations_from_polyhedron(Polyhedron& input_poly
             , std::vector<std::pair<Plane, Face_iterator>>& planes_its) {
@@ -183,10 +189,8 @@ void get_plane_equations_from_polyhedron(Polyhedron& input_poly
         Point_3 p1 = h->vertex()->point();
         Point_3 p2 = h->next()->vertex()->point();
         Point_3 p3 = h->next()->next()->vertex()->point();
-        Plane plane(p1, p2, p3);
-        double norm = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
-        Plane norm_plane(plane.a()/norm, plane.b()/norm, plane.c()/norm, plane.d()/norm);
-        planes_its.push_back({norm_plane, it});
+        Plane plane = unit_plane_equation(p1, p2, p3);
+        planes_its.push_back({plane, it});
     }
 }
 
@@ -210,7 +214,115 @@ Point_3 VectorFrom(double azimuth, double slope, double length) {
     return v;
 }
 
+void transform_height_convex(std::vector<Plane>& planes, std::vector<std::pair<Plane, Face_iterator>>& to_change
+        , std::unordered_set<Vertex_handle>& rundist_vertices, double delta, bool pavilion) {
+    std::vector<Point_3> point_cloud;
+    for(auto& el: to_change) {
+        auto begin = std::get<1>(el)->facet_begin();
+        auto end = rundist_vertices.end();
+        size_t sz = std::get<1>(el)->size();
+        for(size_t i = 0; i < sz; ++i, ++begin) {
+            auto vh = begin->vertex();
+            Point_3 p = vh->point();
+            if (auto it = rundist_vertices.find(vh); it == end) {
+                point_cloud.push_back(Point_3(p.x(), p.y(), p.z() + delta));
+            } else {
+                point_cloud.push_back(p);
+            }
+        }
+    }
+    Polyhedron upper_polly;
+    CGAL::convex_hull_3(point_cloud.begin(), point_cloud.end(), upper_polly);
+    std::vector<std::pair<Vector_3, Face_iterator>> upper_poly_faces;
+    auto end = upper_polly.facets_end();
+    for(auto it = upper_polly.facets_begin(); it != end; ++it) {
+        auto hv = it->halfedge();
+        Point_3 p1 = hv->vertex()->point();
+        Point_3 p2 = hv->next()->vertex()->point();
+        Point_3 p3 = hv->next()->next()->vertex()->point();
+        Vector_3 unit_v = CGAL::unit_normal(p1, p2, p3); 
+        upper_poly_faces.push_back({unit_v, it});
+    }
+    std::sort(upper_poly_faces.begin(), upper_poly_faces.end(), [](const std::pair<Vector_3, Face_iterator>& lf
+                , const std::pair<Vector_3, Face_iterator>& rf) { return lf.first.z() > rf.first.z(); });
+    size_t sz = upper_poly_faces.size();
+    size_t index = 0;
+    for(size_t i = 0; i < sz - 1; ++i) {
+        if (upper_poly_faces[i].first.z() < 0) {
+            index = i;
+            break;
+        }
+    }
+    size_t begin = (pavilion == true) ? 0 : index;
+    size_t stop = (pavilion == true) ? index : sz;
+    for(size_t i = begin; i < stop; ++i) {
+        auto hv = upper_poly_faces[i].second->halfedge();
+        Point_3 p1 = hv->vertex()->point();
+        Point_3 p2 = hv->next()->vertex()->point();
+        Point_3 p3 = hv->next()->next()->vertex()->point();
+        Plane plane = unit_plane_equation(p1, p2, p3);
+        planes.push_back(plane);
+    }
+}
 
+void apply_changes(std::vector<std::pair<Plane, Face_iterator>>& planes, double parametr_of_azimuth
+        , double parametr_of_slope, double parametr_of_shift, double sigma_shift
+        , double sigma_slope, double sigma_azimuth, bool is_change_azimuth, bool is_change_slope
+        , bool is_change_shift, std::string distribution) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dis_uni_azimuth(-parametr_of_azimuth, parametr_of_azimuth);
+    std::uniform_real_distribution<> dis_uni_slope(-parametr_of_slope, parametr_of_slope);
+    std::uniform_real_distribution<> dis_uni_shift(-parametr_of_shift, parametr_of_shift);
+    std::normal_distribution<> dis_normal_shift(0, sigma_shift);
+    std::normal_distribution<> dis_normal_slope(0, sigma_slope);
+    std::normal_distribution<> dis_normal_azimuth(0, sigma_azimuth);
+
+    srand(time(NULL));
+    for(auto& el: planes) {
+        Plane plane = std::get<0>(el);
+        Point_3 vec(plane.a(), plane.b(), plane.c());
+        double d = plane.d();
+        double azimuth = Azimuth(vec);
+        double slope = Slope(vec);
+        if (is_change_azimuth == true) {
+            if (distribution == "uniform") {
+                azimuth += dis_uni_azimuth(gen);
+            } else {
+                double l = dis_normal_azimuth(gen);
+                if (std::fabs(l) > 2 * sigma_azimuth) {
+                    l = (l > 0) ? 2 * sigma_azimuth : -2 * sigma_azimuth;
+                }
+                azimuth += l;
+            }   
+        }
+        if (is_change_slope == true) {
+            if (distribution == "uniform") {
+                slope += dis_uni_slope(gen);
+            } else {
+                double l = dis_normal_slope(gen);
+                if (std::fabs(l) > 2 * sigma_slope) {
+                    l = (l > 0) ? 2 * sigma_slope : -2 * sigma_slope;
+                }
+                slope += l;
+            }   
+        }
+        vec = VectorFrom(azimuth, slope, 1);
+        if (is_change_shift == true) {
+            if (distribution == "uniform") {
+                d += dis_uni_shift(gen);
+            } else {
+                double l = dis_normal_shift(gen);
+                if (std::fabs(l) > 2 * sigma_shift) {
+                    l = (l > 0) ? 2 * sigma_shift : -2 * sigma_shift;
+                }
+                d += l;
+            }
+        }
+        Plane plane_new(vec.x(), vec.y(), vec.z(), d);
+        std::get<0>(el) = plane_new;
+    }
+}
 
 
 int main(int argc, char* argv[]) {
@@ -332,13 +444,10 @@ int main(int argc, char* argv[]) {
         return -1;
     }
     std::vector<std::pair<Plane, Face_iterator>> rundist_planes_its;
-    std::vector<std::tuple<Plane, Face_iterator, Point_3, Point_3>> up_rundist_palnes_its;
-    std::vector<std::pair<Plane, Face_iterator>> up_up_rundist_palnes_its;
-    std::vector<std::tuple<Plane, Face_iterator, Point_3, Point_3>> low_rundist_palnes_its;
-    std::vector<std::pair<Plane, Face_iterator>> low_low_rundist_palnes_its;
+    std::vector<std::pair<Plane, Face_iterator>> up_rundist_planes_its;
+    std::vector<std::pair<Plane, Face_iterator>> low_rundist_planes_its;
 
-    find_rundist_and_other_parts(planes_its, rundist_planes_its, up_rundist_palnes_its
-            , up_up_rundist_palnes_its, low_rundist_palnes_its, low_low_rundist_palnes_its);
+    find_rundist_up_low(planes_its, rundist_planes_its, up_rundist_planes_its, low_rundist_planes_its);
 
 
     std::unordered_set<Vertex_handle> rundist_vertices;
@@ -351,364 +460,39 @@ int main(int argc, char* argv[]) {
     }
 
    
-    double height_pavilion = 0, height_crown =0;
-
-    height_pavilion = calc_height(up_up_rundist_palnes_its, up_rundist_palnes_its);
-    height_crown = calc_height(low_low_rundist_palnes_its, low_rundist_palnes_its);
-
     std::vector<Plane> planes;
 
     if (is_change_height_pavilion == true) {
+        double height_pavilion = calc_height(up_rundist_planes_its);
         double delta = height_pavilion * (parametr_of_height_pavilion/100 - 1);
-        for(auto& el: up_rundist_palnes_its) {
-            std::vector<Point_3> part_of_rundist;
-            std::vector<Point_3> not_rundist;
-            auto begin = std::get<1>(el)->facet_begin();
-            auto vh = begin->vertex();
-            if (auto it = rundist_vertices.find(vh); it != rundist_vertices.end()) {
-                auto end = rundist_vertices.end();
-                while(it != end) {
-                    ++begin;
-                    vh = begin->vertex();
-                    it = rundist_vertices.find(vh);
-                }
-            }
-            size_t sz = std::get<1>(el)->size();
-            for(size_t i = 0; i < sz; ++i, ++begin) {
-                auto vh = begin->vertex();
-                if (auto it = rundist_vertices.find(vh); it != rundist_vertices.end()) {
-                    part_of_rundist.push_back(vh->point());
-                } else {
-                    not_rundist.push_back(vh->point());
-                }
-            }
-
-            size_t sz1 = part_of_rundist.size(), sz2 = not_rundist.size();
-            for(size_t i = 0; i < sz1 - 1; ++i) {
-                Point_3 p1 = part_of_rundist[i];
-                Point_3 p2 = part_of_rundist[i + 1];
-                for(size_t j = 0; j < sz2; ++j) {
-                    Point_3 p3 = not_rundist[j];
-                    p3 = Point_3(p3.x(), p3.y(), p3.z() + delta);
-                    Plane plane(p3, p1, p2);
-                    double norm = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
-                    Plane norm_plane(plane.a()/norm, plane.b()/norm, plane.c()/norm, plane.d()/norm);
-                    planes.push_back(norm_plane);
-                }
-            }
-        }
-        for(auto& el: up_up_rundist_palnes_its) {
-            auto h = el.second->halfedge();
-            Point_3 p1 = h->vertex()->point();
-            Point_3 p2 = h->next()->vertex()->point();
-            Point_3 p3 = h->next()->next()->vertex()->point();
-            p1 = Point_3(p1.x(), p1.y(), p1.z() + delta);
-            p2 = Point_3(p2.x(), p2.y(), p2.z() + delta);
-            p3 = Point_3(p3.x(), p3.y(), p3.z() + delta);
-            Plane plane(p1, p2, p3);
-            double norm = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
-            Plane norm_plane(plane.a()/norm, plane.b()/norm, plane.c()/norm, plane.d()/norm);
-            el.first = norm_plane;
-        }
+        transform_height_convex(planes, up_rundist_planes_its, rundist_vertices, delta, true);
     }
 
     if (is_change_height_crown == true) {
+        double height_crown = calc_height(low_rundist_planes_its);
         double delta = height_crown * (parametr_of_height_crown/100 - 1);
-        std::cout << delta << std::endl;
-        for(auto& el: low_rundist_palnes_its) {
-            std::vector<Point_3> part_of_rundist;
-            std::vector<Point_3> not_rundist;
-            auto begin = std::get<1>(el)->facet_begin();
-            auto vh = begin->vertex();
-            if (auto it = rundist_vertices.find(vh); it != rundist_vertices.end()) {
-                auto end = rundist_vertices.end();
-                while(it != end) {
-                    ++begin;
-                    vh = begin->vertex();
-                    it = rundist_vertices.find(vh);
-                }
-            }
-            size_t sz = std::get<1>(el)->size();
-            for(size_t i = 0; i < sz; ++i, ++begin) {
-                auto vh = begin->vertex();
-                if (auto it = rundist_vertices.find(vh); it != rundist_vertices.end()) {
-                    part_of_rundist.push_back(vh->point());
-                } else {
-                    not_rundist.push_back(vh->point());
-                }
-            }
-
-            size_t sz1 = part_of_rundist.size(), sz2 = not_rundist.size();
-            for(size_t i = 0; i < sz1 - 1; ++i) {
-                Point_3 p1 = part_of_rundist[i];
-                Point_3 p2 = part_of_rundist[i + 1];
-                for(size_t j = 0; j < sz2; ++j) {
-                    Point_3 p3 = not_rundist[j];
-                    p3 = Point_3(p3.x(), p3.y(), p3.z() - delta);
-                    std::cout << p3.z() << std::endl;
-                    Plane plane(p3, p1, p2);
-                    double norm = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
-                    Plane norm_plane(plane.a()/norm, plane.b()/norm, plane.c()/norm, plane.d()/norm);
-                    planes.push_back(norm_plane);
-                }
-            }
-        }
-        for(auto& el: low_low_rundist_palnes_its) {
-            auto h = el.second->halfedge();
-            Point_3 p1 = h->vertex()->point();
-            Point_3 p2 = h->next()->vertex()->point();
-            Point_3 p3 = h->next()->next()->vertex()->point();
-            p1 = Point_3(p1.x(), p1.y(), p1.z() - delta);
-            p2 = Point_3(p2.x(), p2.y(), p2.z() - delta);
-            p3 = Point_3(p3.x(), p3.y(), p3.z() - delta);
-            Plane plane(p1, p2, p3);
-            double norm = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
-            Plane norm_plane(plane.a()/norm, plane.b()/norm, plane.c()/norm, plane.d()/norm);
-            el.first = norm_plane;
-        }
+        transform_height_convex(planes, low_rundist_planes_its, rundist_vertices, -delta, false);
     }
 
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<> dis_uni_azimuth(-parametr_of_azimuth, parametr_of_azimuth);
-    std::uniform_real_distribution<> dis_uni_slope(-parametr_of_slope, parametr_of_slope);
-    std::uniform_real_distribution<> dis_uni_shift(-parametr_of_shift, parametr_of_shift);
-    std::normal_distribution<> dis_normal_shift(0, sigma_shift);
-    std::normal_distribution<> dis_normal_slope(0, sigma_slope);
-    std::normal_distribution<> dis_normal_azimuth(0, sigma_azimuth);
 
-
-    srand(time(NULL));
     if(is_change_pavilion == true) {
-        for(auto& el: up_rundist_palnes_its) {
-            Plane plane = std::get<0>(el);
-            Point_3 vec(plane.a(), plane.b(), plane.c());
-            double d = plane.d();
-            double azimuth = Azimuth(vec);
-            double slope = Slope(vec);
-            if (is_change_azimuth == true) {
-                if (distribution == "uniform") {
-                    azimuth += dis_uni_azimuth(gen);
-                } else {
-                    double l = dis_normal_azimuth(gen);
-                    if (std::fabs(l) > 2 * sigma_azimuth) {
-                        l = (l > 0) ? 2 * sigma_azimuth : -2 * sigma_azimuth;
-                    }
-                    azimuth += l;
-                }   
-            }
-            if (is_change_slope == true) {
-                if (distribution == "uniform") {
-                    slope += dis_uni_slope(gen);
-                } else {
-                    double l = dis_normal_slope(gen);
-                    if (std::fabs(l) > 2 * sigma_slope) {
-                        l = (l > 0) ? 2 * sigma_slope : -2 * sigma_slope;
-                    }
-                    slope += l;
-                }   
-            }
-            vec = VectorFrom(azimuth, slope, 1);
-            if (is_change_shift == true) {
-                if (distribution == "uniform") {
-                    d += dis_uni_shift(gen);
-                } else {
-                    double l = dis_normal_shift(gen);
-                    if (std::fabs(l) > 2 * sigma_shift) {
-                        l = (l > 0) ? 2 * sigma_shift : -2 * sigma_shift;
-                    }
-                    d += l;
-                }
-            }
-            Plane plane_new(vec.x(), vec.y(), vec.z(), d);
-            std::get<0>(el) = plane_new;
-        }
-        for(auto& el: up_up_rundist_palnes_its) {
-            Plane plane = el.first;
-            Point_3 vec(plane.a(), plane.b(), plane.c());
-            double d = plane.d();
-            double azimuth = Azimuth(vec);
-            double slope = Slope(vec);
-            if (is_change_azimuth == true) {
-                if (distribution == "uniform") {
-                    azimuth += dis_uni_azimuth(gen);
-                } else {
-                    double l = dis_normal_azimuth(gen);
-                    if (std::fabs(l) > 2 * sigma_azimuth) {
-                        l = (l > 0) ? 2 * sigma_azimuth : -2 * sigma_azimuth;
-                    }
-                    azimuth += l;
-                }   
-            }
-            if (is_change_slope == true) {
-                if (distribution == "uniform") {
-                    slope += dis_uni_slope(gen);
-                } else {
-                    double l = dis_normal_slope(gen);
-                    if (std::fabs(l) > 2 * sigma_slope) {
-                        l = (l > 0) ? 2 * sigma_slope : -2 * sigma_slope;
-                    }
-                    slope += l;
-                }   
-            }
-            vec = VectorFrom(azimuth, slope, 1);
-            if (is_change_shift == true) {
-                if (distribution == "uniform") {
-                    d += dis_uni_shift(gen);
-                } else {
-                    double l = dis_normal_shift(gen);
-                    if (std::fabs(l) > 2 * sigma_shift) {
-                        l = (l > 0) ? 2 * sigma_shift : -2 * sigma_shift;
-                    }
-                    d += l;
-                }
-            }
-            Plane plane_new(vec.x(), vec.y(), vec.z(), d);
-            el.first = plane_new;
-        }
+        apply_changes(up_rundist_planes_its, parametr_of_azimuth, parametr_of_slope, parametr_of_shift, sigma_shift
+                , sigma_slope, sigma_azimuth, is_change_azimuth, is_change_slope, is_change_shift, distribution);
     }
 
     if(is_change_crown == true) {
-        for(auto& el: low_rundist_palnes_its) {
-            Plane plane = std::get<0>(el);
-            Point_3 vec(plane.a(), plane.b(), plane.c());
-            double d = plane.d();
-            double azimuth = Azimuth(vec);
-            double slope = Slope(vec);
-            if (is_change_azimuth == true) {
-                if (distribution == "uniform") {
-                    azimuth += dis_uni_azimuth(gen);
-                } else {
-                    double l = dis_normal_azimuth(gen);
-                    if (std::fabs(l) > 2 * sigma_azimuth) {
-                        l = (l > 0) ? 2 * sigma_azimuth : -2 * sigma_azimuth;
-                    }
-                    azimuth += l;
-                }   
-            }
-            if (is_change_slope == true) {
-                if (distribution == "uniform") {
-                    slope += dis_uni_slope(gen);
-                } else {
-                    double l = dis_normal_slope(gen);
-                    if (std::fabs(l) > 2 * sigma_slope) {
-                        l = (l > 0) ? 2 * sigma_slope : -2 * sigma_slope;
-                    }
-                    slope += l;
-                }   
-            }
-            vec = VectorFrom(azimuth, slope, 1);
-            if (is_change_shift == true) {
-                if (distribution == "uniform") {
-                    d += dis_uni_shift(gen);
-                } else {
-                    double l = dis_normal_shift(gen);
-                    if (std::fabs(l) > 2 * sigma_shift) {
-                        l = (l > 0) ? 2 * sigma_shift : -2 * sigma_shift;
-                    }
-                    d += l;
-                }
-            }
-            Plane plane_new(vec.x(), vec.y(), vec.z(), d);
-            std::get<0>(el) = plane_new;
-
-        }
-        for(auto& el: low_low_rundist_palnes_its) {
-            Plane plane = el.first;
-            Point_3 vec(plane.a(), plane.b(), plane.c());
-            double d = plane.d();
-            double azimuth = Azimuth(vec);
-            double slope = Slope(vec);
-            if (is_change_azimuth == true) {
-                if (distribution == "uniform") {
-                    azimuth += dis_uni_azimuth(gen);
-                } else {
-                    double l = dis_normal_azimuth(gen);
-                    if (std::fabs(l) > 2 * sigma_azimuth) {
-                        l = (l > 0) ? 2 * sigma_azimuth : -2 * sigma_azimuth;
-                    }
-                    azimuth += l;
-                }   
-            }
-            if (is_change_slope == true) {
-                if (distribution == "uniform") {
-                    slope += dis_uni_slope(gen);
-                } else {
-                    double l = dis_normal_slope(gen);
-                    if (std::fabs(l) > 2 * sigma_slope) {
-                        l = (l > 0) ? 2 * sigma_slope : -2 * sigma_slope;
-                    }
-                    slope += l;
-                }   
-            }
-            vec = VectorFrom(azimuth, slope, 1);
-            if (is_change_shift == true) {
-                if (distribution == "uniform") {
-                    d += dis_uni_shift(gen);
-                } else {
-                    double l = dis_normal_shift(gen);
-                    if (std::fabs(l) > 2 * sigma_shift) {
-                        l = (l > 0) ? 2 * sigma_shift : -2 * sigma_shift;
-                    }
-                    d += l;
-                }
-            }
-            Plane plane_new(vec.x(), vec.y(), vec.z(), d);
-            el.first = plane_new;
-        }
+        apply_changes(low_rundist_planes_its, parametr_of_azimuth, parametr_of_slope, parametr_of_shift, sigma_shift
+                , sigma_slope, sigma_azimuth, is_change_azimuth, is_change_slope, is_change_shift, distribution);
     }
 
     if(is_change_rundist == true) {
-        for(auto& el: rundist_planes_its) {
-            Plane plane = el.first;
-            Point_3 vec(plane.a(), plane.b(), plane.c());
-            double d = plane.d();
-            double azimuth = Azimuth(vec);
-            double slope = Slope(vec);
-            if (is_change_azimuth == true) {
-                if (distribution == "uniform") {
-                    azimuth += dis_uni_azimuth(gen);
-                } else {
-                    double l = dis_normal_azimuth(gen);
-                    if (std::fabs(l) > 2 * sigma_azimuth) {
-                        l = (l > 0) ? 2 * sigma_azimuth : -2 * sigma_azimuth;
-                    }
-                    azimuth += l;
-                }   
-            }
-            if (is_change_slope == true) {
-                if (distribution == "uniform") {
-                    slope += dis_uni_slope(gen);
-                } else {
-                    double l = dis_normal_slope(gen);
-                    if (std::fabs(l) > 2 * sigma_slope) {
-                        l = (l > 0) ? 2 * sigma_slope : -2 * sigma_slope;
-                    }
-                    slope += l;
-                }   
-            }
-            vec = VectorFrom(azimuth, slope, 1);
-            if (is_change_shift == true) {
-                if (distribution == "uniform") {
-                    d += dis_uni_shift(gen);
-                } else {
-                    double l = dis_normal_shift(gen);
-                    if (std::fabs(l) > 2 * sigma_shift) {
-                        l = (l > 0) ? 2 * sigma_shift : -2 * sigma_shift;
-                    }
-                    d += l;
-                }
-            }
-            Plane plane_new(vec.x(), vec.y(), vec.z(), d);
-            el.first = plane_new;
-        }
+        apply_changes(rundist_planes_its, parametr_of_azimuth, parametr_of_slope, parametr_of_shift, sigma_shift
+                , sigma_slope, sigma_azimuth, is_change_azimuth, is_change_slope, is_change_shift, distribution);
     }
 
-    for(auto& el: up_up_rundist_palnes_its) {
-        planes.push_back(el.first);
-    }
+
     if (is_change_height_pavilion == false) {
-        for(auto& el: up_rundist_palnes_its) {
+        for(auto& el: up_rundist_planes_its) {
             planes.push_back(std::get<0>(el));
         }
     }
@@ -716,14 +500,11 @@ int main(int argc, char* argv[]) {
         planes.push_back(el.first);
     }
     if (is_change_height_crown == false) {
-        for(auto& el: low_rundist_palnes_its) {
+        for(auto& el: low_rundist_planes_its) {
             planes.push_back(std::get<0>(el));
         }
     }
-    for(auto& el: low_low_rundist_palnes_its) {
-        planes.push_back(el.first);
-    }
-    
+   
     Polyhedron output_poly;
     CGAL::halfspace_intersection_with_constructions_3(planes.begin(), planes.end(), output_poly); 
 
