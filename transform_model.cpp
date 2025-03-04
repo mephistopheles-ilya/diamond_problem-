@@ -11,6 +11,7 @@
 
 #include <CGAL/Polyhedron_3.h>
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Exact_predicates_exact_constructions_kernel.h>
 #include <CGAL/Surface_mesh/IO/PLY.h>
 #include <CGAL/boost/graph/IO/OBJ.h>
 #include <CGAL/Surface_mesh.h>
@@ -19,9 +20,14 @@
 #include <CGAL/Kernel/global_functions.h>
 #include <CGAL/Polyhedron_incremental_builder_3.h>
 
+#include <fenv.h>
+
+#define DEBUG
 
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
+//typedef CGAL::Exact_predicates_exact_constructions_kernel   K;
+//typedef CGAL::Simple_cartesian<double>                      K;
 typedef CGAL::Polyhedron_3<K>                               Polyhedron;
 typedef K::Point_3                                          Point_3;
 typedef K::Plane_3                                          Plane;
@@ -33,11 +39,13 @@ typedef Polyhedron::HalfedgeDS                              HalfedgeDS;
 
 
 template <class HDS>
-class Build_triangle : public CGAL::Modifier_base<HDS> {
+class Build_polyhedron : public CGAL::Modifier_base<HDS> {
 public:
     std::vector<Face_iterator> faces;
-    Build_triangle() {}
-    void add_face(const std::vector<std::pair<Vector_3, Face_iterator>>& all_faces, size_t begin, size_t end) {
+    Build_polyhedron() {}
+
+    template <typename Smt>
+    void add_face(const std::vector<std::pair<Smt, Face_iterator>>& all_faces, size_t begin, size_t end) {
         for(size_t i = begin; i < end; ++i) {
             faces.push_back(all_faces[i].second);
         }
@@ -76,6 +84,26 @@ public:
         B.end_surface();
     }
 };
+
+template <typename Smt>
+void print_faces_as_polyhedron_ply(std::vector<std::pair<Smt, Face_iterator>>& all_faces, size_t begin, size_t end, std::string filename
+        , double precison = 12.) {
+    Polyhedron polyhedron;
+    Build_polyhedron<HalfedgeDS> build_poly;
+    build_poly.add_face(all_faces, begin, end);
+    polyhedron.delegate(build_poly);
+
+    std::ofstream of(filename);
+    of << std::fixed << std::setprecision(precison);
+    CGAL::IO::write_PLY(of, polyhedron);
+}
+void print_polyhedron_ply(Polyhedron& polyhedron, std::string filename, double precision=12.) {
+        std::ofstream of(filename);
+        of << std::fixed << std::setprecision(precision);
+        CGAL::IO::write_PLY(of, polyhedron);
+}
+
+
 
 
 bool read_planes_from_file(std::vector<Plane>& planes, std::string filename
@@ -139,14 +167,9 @@ void find_rundist_up_low(std::vector<std::pair<Plane, Face_iterator>>& planes_it
     double z_start = rundist_planes_its.begin()->first.c();
     double z_end = std::prev(rundist_planes_its.end())->first.c();
     for(auto& el: planes_its) {
-        auto h = el.second->halfedge();
-        Point_3 p1 = h->vertex()->point();
-        Point_3 p2 = h->next()->vertex()->point();
-        Point_3 p3 = h->next()->next()->vertex()->point();
-        Vector_3 unit_n = CGAL::unit_normal(p1, p2, p3);
-        if (unit_n.z() > z_start) {
+        if (el.first.c() > z_start) {
             up_rundist_planes_its.push_back(el);
-        } else if (unit_n.z() < z_end) {
+        } else if (el.first.c() < z_end) {
             low_rundist_planes_its.push_back(el);
         }
     }
@@ -189,6 +212,13 @@ void get_plane_equations_from_polyhedron(Polyhedron& input_poly
         Point_3 p1 = h->vertex()->point();
         Point_3 p2 = h->next()->vertex()->point();
         Point_3 p3 = h->next()->next()->vertex()->point();
+        while (CGAL::collinear(p1, p2, p3)) {
+            h = h->next();
+            p1 = h->vertex()->point();
+            p2 = h->next()->vertex()->point();
+            p3 = h->next()->next()->vertex()->point();
+        }
+
         Plane plane = unit_plane_equation(p1, p2, p3);
         planes_its.push_back({plane, it});
     }
@@ -326,6 +356,7 @@ void apply_changes(std::vector<std::pair<Plane, Face_iterator>>& planes, double 
 
 
 int main(int argc, char* argv[]) {
+    feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW | FE_UNDERFLOW);
     std::string input_file;
     std::string type_of_input_file;
     std::string output_file;
@@ -449,6 +480,13 @@ int main(int argc, char* argv[]) {
 
     find_rundist_up_low(planes_its, rundist_planes_its, up_rundist_planes_its, low_rundist_planes_its);
 
+#ifdef DEBUG
+    print_polyhedron_ply(input_poly, "debug_initial_polyhedron.ply");
+    print_faces_as_polyhedron_ply(rundist_planes_its, 0, rundist_planes_its.size(), "debug_rundist.ply");
+    print_faces_as_polyhedron_ply(up_rundist_planes_its, 0, up_rundist_planes_its.size(), "debug_up_rundist.ply");
+    print_faces_as_polyhedron_ply(low_rundist_planes_its, 0, low_rundist_planes_its.size(), "debug_low_rundist.ply");
+#endif
+
 
     std::unordered_set<Vertex_handle> rundist_vertices;
     for(auto& el: rundist_planes_its) {
@@ -489,7 +527,6 @@ int main(int argc, char* argv[]) {
         apply_changes(rundist_planes_its, parametr_of_azimuth, parametr_of_slope, parametr_of_shift, sigma_shift
                 , sigma_slope, sigma_azimuth, is_change_azimuth, is_change_slope, is_change_shift, distribution);
     }
-
 
     if (is_change_height_pavilion == false) {
         for(auto& el: up_rundist_planes_its) {
