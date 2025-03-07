@@ -1,14 +1,17 @@
+//standart library headers
 #include <iostream>
 #include <ostream>
 #include <vector>
-#include <map>
 #include <limits>
-#include <tuple>
 #include <unordered_set>
+#include <unordered_map>
 #include <random>
+#include <cmath>
 
+//boost library headers
 #include <boost/program_options.hpp>
 
+//cgal library headres
 #include <CGAL/Polyhedron_3.h>
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Exact_predicates_exact_constructions_kernel.h>
@@ -20,14 +23,12 @@
 #include <CGAL/Kernel/global_functions.h>
 #include <CGAL/Polyhedron_incremental_builder_3.h>
 
+//enable floating point exceptions
 #include <fenv.h>
-
-#define DEBUG
 
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 //typedef CGAL::Exact_predicates_exact_constructions_kernel   K;
-//typedef CGAL::Simple_cartesian<double>                      K;
 typedef CGAL::Polyhedron_3<K>                               Polyhedron;
 typedef K::Point_3                                          Point_3;
 typedef K::Plane_3                                          Plane;
@@ -36,6 +37,45 @@ typedef Polyhedron::Face_iterator                           Face_iterator;
 typedef Polyhedron::Face_handle                             Face_handle;
 typedef Polyhedron::Vertex_handle                           Vertex_handle;
 typedef Polyhedron::HalfedgeDS                              HalfedgeDS;
+
+
+#define _DTOR_   0.0174532925199432957692         //  PI / 180
+inline double Rad2Deg(double a) { return a / _DTOR_; }
+inline double Deg2Rad(double a) { return a * _DTOR_; }
+ 
+double Azimuth(const Point_3& v) {
+    double a = std::atan2(v.x(), v.y());
+    return (a >= 0) ? a : a + 2*M_PI;
+}
+
+double Slope(const Point_3 &v) {
+    double d = sqrt(v.x()*v.x() + v.y()*v.y());
+    return std::atan2(v.z(), d);
+}
+
+Point_3 VectorFrom(double azimuth, double slope, double length) {
+    double c = std::cos(slope);
+    Point_3 v(length * std::sin(azimuth) * c, length * std::cos(azimuth) * c, length * std::sin(slope));
+    return v;
+}
+
+void write_points_ply(std::vector<Point_3>& points, const std::string& filename) {
+    std::ofstream out(filename);
+
+    out << "ply" << std::endl;
+    out << "format ascii 1.0" << std::endl;
+    out << "element vertex " << points.size() <<  std::endl;
+    out << "property double x" << std::endl;
+    out << "property double y" << std::endl;
+    out << "property double z" << std::endl;
+    out << "end_header" << std::endl;
+
+    for(auto& p: points) {
+        out << p.x() << " " << p.y() << " " << p.z() << std::endl;
+    }
+
+    out.close();
+}
 
 
 template <class HDS>
@@ -52,21 +92,21 @@ public:
     }
     void operator()( HDS& hds) {
         CGAL::Polyhedron_incremental_builder_3<HDS> B( hds, true);
-        std::map<Vertex_handle, size_t> vertex_map;
+        std::unordered_map<Vertex_handle, size_t> vertices;
         size_t vertex_index = 0;
         for(auto& face: faces) {
             auto begin = face->facet_begin();
             size_t num = face->size();
             for(size_t i = 0; i < num; ++i, ++begin) {
-                if (vertex_map.find(begin->vertex()) == vertex_map.end()) {
-                    vertex_map[begin->vertex()] = vertex_index;
+                auto insert = vertices.insert({begin->vertex(), vertex_index}).second;
+                if (insert == true) {
                     ++vertex_index;
                 }
             }
         }
-        B.begin_surface(vertex_map.size(), faces.size(), vertex_map.size(), 1);
+        B.begin_surface(vertices.size(), faces.size(), vertices.size(), 1);
         std::vector<std::pair<Vertex_handle, size_t>> v;
-        std::copy(vertex_map.begin(), vertex_map.end(), std::back_inserter(v));
+        std::copy(vertices.begin(), vertices.end(), std::back_inserter(v));
         std::sort(v.begin(), v.end(), [](const std::pair<Vertex_handle, size_t>& a
                     , const std::pair<Vertex_handle, size_t>& b) { return a.second < b.second;});
         for(const auto& el: v) {
@@ -77,7 +117,7 @@ public:
             auto begin = face->facet_begin();
             size_t num = face->size();
             for(size_t i = 0; i < num; ++i, ++begin) {
-                B.add_vertex_to_facet(vertex_map[begin->vertex()]);
+                B.add_vertex_to_facet(vertices.find(begin->vertex())->second);
             }
             B.end_facet();
         }
@@ -135,7 +175,7 @@ bool read_planes_from_file(std::vector<Plane>& planes, std::string filename
     return true;
 }
 
-void find_rundist_up_low(std::vector<std::pair<Plane, Face_iterator>>& planes_its
+bool find_rundist_up_low(std::vector<std::pair<Plane, Face_iterator>>& planes_its
         , std::vector<std::pair<Plane, Face_iterator>>& rundist_planes_its
         , std::vector<std::pair<Plane, Face_iterator>>& up_rundist_planes_its
         , std::vector<std::pair<Plane, Face_iterator>>& low_rundist_planes_its
@@ -157,7 +197,9 @@ void find_rundist_up_low(std::vector<std::pair<Plane, Face_iterator>>& planes_it
 
     std::sort(gaps.begin(), gaps.end(), [](const std::pair<size_t, double>& l, const std::pair<size_t, double>& r) {
             return l.second > r.second; });
-    
+    if (gaps.size() < 2) {
+        return false;
+    }
     size_t begin = std::min(gaps[0].first, gaps[1].first);
     size_t before_end = std::max(gaps[0].first, gaps[1].first);
     ++begin;
@@ -174,7 +216,7 @@ void find_rundist_up_low(std::vector<std::pair<Plane, Face_iterator>>& planes_it
         }
     }
 
-    return;
+    return true;
 }
 
 double calc_height(std::vector<std::pair<Plane, Face_iterator>>& v1) {
@@ -198,51 +240,39 @@ double calc_height(std::vector<std::pair<Plane, Face_iterator>>& v1) {
 
 inline Plane unit_plane_equation(Point_3 p1, Point_3 p2, Point_3 p3) {
     Plane plane(p1, p2, p3);
-    double norm = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
+    Vector_3 ort_v = Vector_3(plane.a(), plane.b(), plane.c());
+    double norm = std::sqrt(ort_v.squared_length());
     Plane norm_plane(plane.a()/norm, plane.b()/norm, plane.c()/norm, plane.d()/norm);
     return norm_plane;
 }
 
 
-void get_plane_equations_from_polyhedron(Polyhedron& input_poly
+bool get_plane_equations_from_polyhedron(Polyhedron& input_poly
             , std::vector<std::pair<Plane, Face_iterator>>& planes_its) {
     auto end = input_poly.facets_end();
     for(auto it = input_poly.facets_begin(); it != end; ++it) {
+        size_t iterations = it->size();
         auto h = it->halfedge();
         Point_3 p1 = h->vertex()->point();
         Point_3 p2 = h->next()->vertex()->point();
         Point_3 p3 = h->next()->next()->vertex()->point();
-        while (CGAL::collinear(p1, p2, p3)) {
+        size_t counter = 0;
+        while (CGAL::collinear(p1, p2, p3) && counter < iterations) {
             h = h->next();
             p1 = h->vertex()->point();
             p2 = h->next()->vertex()->point();
             p3 = h->next()->next()->vertex()->point();
+            ++counter;
         }
-
+        if (CGAL::collinear(p1, p2, p3) == true) {
+            return false;
+        }
         Plane plane = unit_plane_equation(p1, p2, p3);
         planes_its.push_back({plane, it});
     }
+    return true;
 }
 
-#define _DTOR_   0.0174532925199432957692         //  PI / 180
-inline double Rad2Deg(double a) { return a / _DTOR_; }
-inline double Deg2Rad(double a) { return a * _DTOR_; }
- 
-double Azimuth(const Point_3& v) {
-    double a = atan2(v.x(), v.y());
-    return (a >= 0) ? a : a + 2*M_PI;
-}
-
-double Slope(const Point_3 &v) {
-    double d = sqrt(v.x()*v.x() + v.y()*v.y());
-    return atan2(v.z(), d);
-}
-
-Point_3 VectorFrom(double azimuth, double slope, double length) {
-    double c = cos(slope);
-    Point_3 v(length*sin(azimuth)*c, length*cos(azimuth)*c, length*sin(slope));
-    return v;
-}
 
 void transform_height_convex(std::vector<Plane>& planes, std::vector<std::pair<Plane, Face_iterator>>& to_change
         , std::unordered_set<Vertex_handle>& rundist_vertices, double delta, bool pavilion) {
@@ -294,6 +324,74 @@ void transform_height_convex(std::vector<Plane>& planes, std::vector<std::pair<P
         planes.push_back(plane);
     }
 }
+
+bool transform_height_rotate(std::vector<Plane>& planes, std::vector<std::pair<Plane, Face_iterator>>& to_change
+        , std::unordered_set<Vertex_handle>& rundist_vertices
+        , double delta) {
+    auto rundist_vertices_end = rundist_vertices.end();
+#ifndef NDEBUG
+    std::vector<Point_3> d_points;
+#endif
+    for(auto& el: to_change) {
+        int vertices_on_rundist = 0;
+        auto begin = el.second->facet_begin();
+        size_t sz = el.second->size();
+        for(size_t i = 0; i < sz; ++i, ++begin) {
+            bool on_rundist = (rundist_vertices.find(begin->vertex()) != rundist_vertices_end);
+            if (on_rundist == true) {
+                ++vertices_on_rundist;
+            }
+        }
+        if (vertices_on_rundist == 1) {
+            return false;
+        }
+        if (vertices_on_rundist == 0) {
+            auto h = el.second->halfedge();
+            Point_3 p1 = h->vertex()->point();
+            Point_3 p2 = h->next()->vertex()->point();
+            Point_3 p3 = h->next()->next()->vertex()->point();
+            p1 = Point_3(p1.x(), p1.y(), p1.z() + delta);
+            p2 = Point_3(p2.x(), p2.y(), p2.z() + delta);
+            p3 = Point_3(p3.x(), p3.y(), p3.z() + delta);
+            Plane p = unit_plane_equation(p1, p2, p3);
+            planes.push_back(p);
+        } else {
+            Point_3 p1(0, 0, 0), p2(0, 0, 0), p3(0, 0, 0);
+            auto begin = el.second->facet_begin();
+            auto after_begin = begin;
+            ++after_begin;
+            size_t sz = el.second->size();
+            bool is_current_vetex_rundist = false;
+            bool is_next_vertex_rundist = false;
+            for(size_t i = 0; i < sz; ++i, ++begin, ++after_begin) {
+                is_current_vetex_rundist = (rundist_vertices.find(begin->vertex()) != rundist_vertices_end);
+                is_next_vertex_rundist = (rundist_vertices.find(after_begin->vertex()) != rundist_vertices_end);
+                if (is_current_vetex_rundist == true && is_next_vertex_rundist == false) {
+                    p2 = begin->vertex()->point();
+                    p3 = after_begin->vertex()->point();
+                }
+                if (is_current_vetex_rundist == false && is_next_vertex_rundist == true) {
+                    p1 = after_begin->vertex()->point();
+                }
+            }
+#ifndef NDEBUG
+            d_points.push_back(p1);
+            d_points.push_back(p2);
+            d_points.push_back(p3);
+#endif
+            p3 = Point_3(p3.x(), p3.y(), p3.z() + delta);
+            bool is_collinear = CGAL::collinear(p1, p2, p3);
+            if (is_collinear == true) {
+                return false;
+            }
+            Plane u_plane = unit_plane_equation(p1, p2, p3);
+            planes.push_back(u_plane);
+        }
+    }
+    write_points_ply(d_points, "debug_points.ply");
+    return true;
+}
+
 
 void apply_changes(std::vector<std::pair<Plane, Face_iterator>>& planes, double parametr_of_azimuth
         , double parametr_of_slope, double parametr_of_shift, double sigma_shift
@@ -354,9 +452,79 @@ void apply_changes(std::vector<std::pair<Plane, Face_iterator>>& planes, double 
     }
 }
 
+void write_TXT(std::ofstream& of, Polyhedron& poly) {
+    of << "# POLYHEDRON:" << std::endl;
+    of << "# num_vertices   num_facets   num_edges" << std::endl;
+    unsigned int num_vertices = poly.size_of_vertices();
+    unsigned int num_facets = poly.size_of_facets();
+    unsigned int num_edges = poly.size_of_halfedges() / 2;
+    of << ' ' << num_vertices << ' ' << num_facets << ' ' << num_edges << std::endl;
+
+    of << "# vertices:" << std::endl;
+    of << "#   id   x y z" << std::endl;
+
+    unsigned int i = 0;
+    for(auto it = poly.vertices_begin(); it != poly.vertices_end(); ++it, ++i) {
+        of << "  " << i << ' ' << (*it).point().x() << ' ' << (*it).point().y() << ' ' << (*it).point().z() << std::endl;
+    }
+    of << "# facets:" << std::endl;
+    of << "#   id   num_of_sides   plane_coeff  (ax + by + cz + d = 0)" << std::endl;
+    of << "#   indices_of_vertices" << std::endl;
+
+    i = 0;
+    for(auto fit = poly.facets_begin(); fit != poly.facets_end(); ++fit, ++i) {
+        of << "   ";
+        auto h = (*fit).halfedge();
+        Plane plane  = Plane(h->vertex()->point(), h->next()->vertex()->point(), h->next()->next()->vertex()->point());
+        double norm = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
+        auto pit = (*fit).facet_begin();
+        unsigned int nv = (*fit).size();
+        of << ' ' <<  i << "  " << nv << "  " << plane.a()/norm << ' ' << plane.b()/norm << ' ' <<
+            plane.c()/norm << ' ' << plane.d()/norm << std::endl;
+        of << "     ";
+        for(unsigned int j = 0; j < nv; ++j) {
+            unsigned int number = 0;
+            for(auto it = poly.vertices_begin(); it != pit->vertex(); ++it, ++number) {
+            }
+            ++pit;
+            of << number << ' ';
+        }
+        of << std::endl;
+    }
+
+    of << "# edges:" << std::endl;
+    of << "#    vert1_id  vert2_id  facet1_id  facet2_id" << std::endl;
+
+    for(auto edge = poly.edges_begin(); edge != poly.edges_end(); ++edge) {
+        auto face1 = edge->face();
+        auto face2 = edge->opposite()->face();
+        auto ver1 = edge->vertex();
+        auto ver2 = edge->opposite()->vertex();
+        unsigned int number = 0;
+        for(auto it = poly.vertices_begin(); it != ver1; ++it, ++number) {
+        }
+        of << number << ' ';
+        number = 0;
+        for(auto it = poly.vertices_begin(); it != ver2; ++it, ++number) {
+        }
+        of << number << ' ';
+        number = 0;
+        for(auto it = poly.facets_begin(); it != face1; ++it, ++number) {
+        }
+        of << number << ' ';
+        number = 0;
+        for(auto it = poly.facets_begin(); it != face2; ++it, ++number) {
+        }
+        of << number << std::endl;
+    }
+}
+
+
 
 int main(int argc, char* argv[]) {
+
     feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW | FE_UNDERFLOW);
+
     std::string input_file;
     std::string type_of_input_file;
     std::string output_file;
@@ -385,9 +553,9 @@ int main(int argc, char* argv[]) {
         ("type_of_input_file", boost::program_options::value<std::string>(&type_of_input_file) 
          -> default_value("ply"), "txt, ply or obj")
         ("output_file", boost::program_options::value<std::string>(&output_file)
-         -> default_value("model_out.ply"), "file to save model in specila format")
+         -> default_value("model_out"), "file to save model in specila format")
         ("type_of_output_file", boost::program_options::value<std::string>(&type_of_output_file) 
-         -> default_value("ply"), "ply or obj")
+         -> default_value("ply"), "ply, or obj or txt")
 
         ("is_change_shift", boost::program_options::value<bool>(&is_change_shift)
          -> default_value(false), "do you want to shift a parametr d")
@@ -432,10 +600,12 @@ int main(int argc, char* argv[]) {
     boost::program_options::variables_map vm;
     boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
     boost::program_options::notify(vm);
+
     if (vm.count("help")) {
         std::cout << desc << "\n";
         return 1;
     }
+
     sigma_azimuth = Deg2Rad(sigma_azimuth);
     sigma_slope = Deg2Rad(sigma_slope);
     parametr_of_azimuth = Deg2Rad(parametr_of_azimuth);
@@ -451,7 +621,11 @@ int main(int argc, char* argv[]) {
             std::cerr << "Cannot read ply polyhedron from: " << input_file << std::endl;
             return -1;
         }
-        get_plane_equations_from_polyhedron(input_poly, planes_its);
+        succes = get_plane_equations_from_polyhedron(input_poly, planes_its);
+        if (succes == false) {
+            std::cerr << "Canot get plane equations from polyhedron" << std::endl;
+            return -2;
+        }
 
     } else if (type_of_input_file == "obj") {
         succes = CGAL::IO::read_OBJ(input_file, input_poly);
@@ -459,7 +633,11 @@ int main(int argc, char* argv[]) {
             std::cerr << "Cannot read obj polyhedron from: " << input_file << std::endl;
             return -1;
         }
-        get_plane_equations_from_polyhedron(input_poly, planes_its);
+        succes = get_plane_equations_from_polyhedron(input_poly, planes_its);
+        if (succes == false) {
+            std::cerr << "Canot get plane equations from polyhedron" << std::endl;
+            return -2;
+        }
 
     } else if (type_of_input_file == "txt") {
         std::vector<Plane> planes;
@@ -469,22 +647,32 @@ int main(int argc, char* argv[]) {
             return -1;
         }
         CGAL::halfspace_intersection_with_constructions_3(planes.begin(), planes.end(), input_poly); 
-        get_plane_equations_from_polyhedron(input_poly, planes_its);
+        succes = get_plane_equations_from_polyhedron(input_poly, planes_its);
+        if (succes == false) {
+            std::cerr << "Canot get plane equations from polyhedron" << std::endl;
+            return -2;
+        }
+
     } else {
         std::cerr << "Wrong type of file" << std::endl;
         return -1;
     }
+
     std::vector<std::pair<Plane, Face_iterator>> rundist_planes_its;
     std::vector<std::pair<Plane, Face_iterator>> up_rundist_planes_its;
     std::vector<std::pair<Plane, Face_iterator>> low_rundist_planes_its;
 
-    find_rundist_up_low(planes_its, rundist_planes_its, up_rundist_planes_its, low_rundist_planes_its);
+    succes = find_rundist_up_low(planes_its, rundist_planes_its, up_rundist_planes_its, low_rundist_planes_its);
+    if (succes == false) {
+        std::cerr << "Cannot find rundist and other parts" << std::endl;
+        return -3;
+    }
 
-#ifdef DEBUG
+#ifndef NDEBUG
     print_polyhedron_ply(input_poly, "debug_initial_polyhedron.ply");
-    print_faces_as_polyhedron_ply(rundist_planes_its, 0, rundist_planes_its.size(), "debug_rundist.ply");
-    print_faces_as_polyhedron_ply(up_rundist_planes_its, 0, up_rundist_planes_its.size(), "debug_up_rundist.ply");
-    print_faces_as_polyhedron_ply(low_rundist_planes_its, 0, low_rundist_planes_its.size(), "debug_low_rundist.ply");
+    print_faces_as_polyhedron_ply(rundist_planes_its, 0, rundist_planes_its.size(), "debug_rundist_in.ply");
+    print_faces_as_polyhedron_ply(up_rundist_planes_its, 0, up_rundist_planes_its.size(), "debug_up_rundist_in.ply");
+    print_faces_as_polyhedron_ply(low_rundist_planes_its, 0, low_rundist_planes_its.size(), "debug_low_rundist_in.ply");
 #endif
 
 
@@ -496,20 +684,27 @@ int main(int argc, char* argv[]) {
             rundist_vertices.insert(begin->vertex());
         }
     }
-
    
     std::vector<Plane> planes;
 
     if (is_change_height_pavilion == true) {
         double height_pavilion = calc_height(up_rundist_planes_its);
         double delta = height_pavilion * (parametr_of_height_pavilion/100 - 1);
-        transform_height_convex(planes, up_rundist_planes_its, rundist_vertices, delta, true);
+        succes = transform_height_rotate(planes, up_rundist_planes_its, rundist_vertices, delta);
+        if (succes == false) {
+            std::cerr << "Cannot change height of pavilion" << std::endl;
+            return -4;
+        }
     }
 
     if (is_change_height_crown == true) {
         double height_crown = calc_height(low_rundist_planes_its);
         double delta = height_crown * (parametr_of_height_crown/100 - 1);
-        transform_height_convex(planes, low_rundist_planes_its, rundist_vertices, -delta, false);
+        succes = transform_height_rotate(planes, low_rundist_planes_its, rundist_vertices, -delta);
+        if (succes == false) {
+            std::cerr << "Cannot change height of crown" << std::endl;
+            return -4;
+        }
     }
 
 
@@ -544,16 +739,47 @@ int main(int argc, char* argv[]) {
    
     Polyhedron output_poly;
     CGAL::halfspace_intersection_with_constructions_3(planes.begin(), planes.end(), output_poly); 
-
-    if (type_of_output_file == "ply") {
-        std::ofstream of1(output_file);
-        of1 << std::fixed << std::setprecision(12);
-        CGAL::IO::write_PLY(of1, output_poly);
-    } else if (type_of_output_file == "obj") {
-        std::ofstream of2(output_file);
-        of2 << std::fixed << std::setprecision(12);
-        CGAL::IO::write_OBJ(of2, output_poly);
+    if (type_of_output_file.find("ply") != std::string::npos) {
+        std::string filename = output_file + ".ply";
+        std::ofstream of(filename);
+        of << std::fixed << std::setprecision(12);
+        CGAL::IO::write_PLY(of, output_poly);
     }
+    if (type_of_output_file.find("obj") != std::string::npos) {
+        std::string filename = output_file + ".obj";
+        std::ofstream of(filename);
+        of << std::fixed << std::setprecision(12);
+        CGAL::IO::write_OBJ(of, output_poly);
+    }
+    if (type_of_output_file.find("txt") != std::string::npos) {
+        std::string filename = output_file + ".txt";
+        std::ofstream of(filename);
+        of << std::fixed << std::setprecision(12);
+        write_TXT(of, output_poly);
+    }
+
+
+#ifndef NDEBUG
+   std::vector<std::pair<Plane, Face_iterator>> debug_planes_its;
+   succes = get_plane_equations_from_polyhedron(output_poly, debug_planes_its);
+   if (succes == false) {
+       std::cerr << "Canot get plane equations from polyhedron debug" << std::endl;
+       return -10;
+   }
+   std::vector<std::pair<Plane, Face_iterator>> debug_rundist_planes_its;
+   std::vector<std::pair<Plane, Face_iterator>> debug_up_rundist_planes_its;
+   std::vector<std::pair<Plane, Face_iterator>> debug_low_rundist_planes_its;
+   succes = find_rundist_up_low(debug_planes_its, debug_rundist_planes_its
+           , debug_up_rundist_planes_its, debug_low_rundist_planes_its);
+   if (succes == false) {
+       std::cerr << "Cannot find rundist and other parts in debug" << std::endl;
+       return -11;
+   }
+   print_faces_as_polyhedron_ply(debug_rundist_planes_its, 0, debug_rundist_planes_its.size(), "debug_rundist_out.ply");
+   print_faces_as_polyhedron_ply(debug_up_rundist_planes_its, 0, debug_up_rundist_planes_its.size(), "debug_up_rundist_out.ply");
+   print_faces_as_polyhedron_ply(debug_low_rundist_planes_its, 0, debug_low_rundist_planes_its.size(), "debug_low_rundist_out.ply");
+#endif
+
 
     return 0;
 }
