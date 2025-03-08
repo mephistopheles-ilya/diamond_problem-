@@ -388,7 +388,9 @@ bool transform_height_rotate(std::vector<Plane>& planes, std::vector<std::pair<P
             planes.push_back(u_plane);
         }
     }
+#ifndef NDEBUG
     write_points_ply(d_points, "debug_points.ply");
+#endif
     return true;
 }
 
