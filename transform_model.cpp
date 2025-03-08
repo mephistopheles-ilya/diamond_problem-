@@ -741,6 +741,10 @@ int main(int argc, char* argv[]) {
    
     Polyhedron output_poly;
     CGAL::halfspace_intersection_with_constructions_3(planes.begin(), planes.end(), output_poly); 
+    if (output_poly.size_of_facets() < 5) {
+        std::cerr << "Too few points in output poly" << std::endl;
+        return -5;
+    }
     if (type_of_output_file.find("ply") != std::string::npos) {
         std::string filename = output_file + ".ply";
         std::ofstream of(filename);
