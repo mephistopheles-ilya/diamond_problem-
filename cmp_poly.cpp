@@ -1,10 +1,8 @@
 #include <iostream>
 #include <vector>
-#include <iterator>
 #include <algorithm>
 
 #include <boost/program_options.hpp>
-#include <boost/iterator/transform_iterator.hpp>
 
 #include <CGAL/Polyhedron_3.h>
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
@@ -14,29 +12,123 @@
 #include <CGAL/centroid.h>
 #include <CGAL/squared_distance_3.h>
 
+
+#include <fenv.h>
+
+#include "munkres.h" // from https://github.com/saebyn/munkres-cpp.git
+// g++ -g -std=c++20 -fsanitize=leak,undefined,address cmp_poly.cpp -lboost_program_options -lgmp -lmunkres -L /home/ilya/munkres-cpp/build -I /home/ilya/munkres-cpp/src -o cmp_poly.out`
+
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 typedef CGAL::Polyhedron_3<K>                               Polyhedron;
 typedef K::Point_3                                          Point_3;
 typedef K::Plane_3                                          Plane;
+typedef Polyhedron::Face_iterator                           Face_iterator;
 
 
-struct to_point {
-    Point_3 operator()(std::iterator_traits<const Polyhedron::Halfedge_around_facet_circulator>::reference it) const {
-        return it.vertex()->point();
-    } 
-};
+Point_3 calc_centr(Face_iterator fit) {
+    double all_area = 0;
+    size_t num = fit->size();
+    auto h = fit->halfedge();
+    Point_3 center(0, 0, 0);
+    Point_3 p0 = h->vertex()->point();
+    h = h->next();
+    Point_3 p1 = h->vertex()->point();
+    h = h->next();
+    Point_3 p2(0, 0, 0);
+    for(size_t i = 2; i < num; ++i) {
+        p2 = h->vertex()->point();
+        h = h->next();
+        double area = std::fabs(CGAL::squared_area(p0, p1, p2));
+        Point_3 center1 = Point_3((p0.x() + p1.x() + p1.x())/3, (p0.y() + p1.y() + p2.y())/3, (p0.z() + p1.z() + p2.z())/3);
+        center = Point_3(center.x() + center1.x() * area, center.y() + center1.y() * area
+                , center.z() + center1.z() * area);
+        all_area += area;
+        p1 = p2;
+    }
+    return Point_3(center.x()/all_area, center.y()/all_area, center.z()/all_area);
+}
 
-struct norm_center {
-    Point_3 norm1;
-    Point_3 center1;
-    typename Polyhedron::Face_iterator it1;
-    typename Polyhedron::Face_iterator it2;
-    Point_3 norm2;
-    Point_3 center2;
+Point_3 calc_norm(Face_iterator fit) {
+    auto h = (*fit).halfedge();
+    Plane plane  = Plane(h->vertex()->point(), h->next()->vertex()->point(), h->next()->next()->vertex()->point());
+    double norm_length = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
+    Point_3 norm = Point_3(plane.a() / norm_length, plane.b() / norm_length, plane.c() / norm_length);
+    return norm;
+}
+
+Plane calc_unit_plane(Face_iterator fit) {
+    auto h = (*fit).halfedge();
+    Plane plane  = Plane(h->vertex()->point(), h->next()->vertex()->point(), h->next()->next()->vertex()->point());
+    double norm_length = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
+    Plane norm = Plane(plane.a() / norm_length, plane.b() / norm_length, plane.c() / norm_length, plane.d() / norm_length);
+    return norm;
+}
+
+
+
+bool find_rundist_up_low(std::vector<Face_iterator>& planes_its
+        , std::vector<Face_iterator>& rundist_planes_its
+        , std::vector<Face_iterator>& up_rundist_planes_its
+        , std::vector<Face_iterator>& low_rundist_planes_its
+        ) {
+    std::sort(planes_its.begin(), planes_its.end(), [](Face_iterator fit1, Face_iterator fit2) { 
+            Plane p1 = calc_unit_plane(fit1);
+            Plane p2 = calc_unit_plane(fit2);
+            return p1.c() > p2.c();});
+
+    size_t sz = planes_its.size();
+
+    std::vector<std::pair<size_t, double>> gaps;
+    gaps.reserve(sz - 1);
+
+    for(size_t i = 0; i < sz - 1; ++i) {
+        Plane p1 = calc_unit_plane(planes_its[i]);
+        Plane p2 = calc_unit_plane(planes_its[i + 1]);
+        double gap = p1.c() - p2.c();
+        gaps.push_back({i, gap});
+    }
+
+
+    std::sort(gaps.begin(), gaps.end(), [](const std::pair<size_t, double>& l, const std::pair<size_t, double>& r) {
+            return l.second > r.second; });
+    if (gaps.size() < 2) {
+        return false;
+    }
+    size_t begin = std::min(gaps[0].first, gaps[1].first);
+    size_t before_end = std::max(gaps[0].first, gaps[1].first);
+    ++begin;
+    std::copy(planes_its.begin() + begin, planes_its.begin() + before_end + 1, std::back_inserter(rundist_planes_its));
+
+
+    double z_start = calc_unit_plane(*rundist_planes_its.begin()).c();
+    double z_end = calc_unit_plane(*std::prev(rundist_planes_its.end())).c();
+    for(auto& el: planes_its) {
+        Plane p = calc_unit_plane(el);
+        if (p.c() > z_start) {
+            up_rundist_planes_its.push_back(el);
+        } else if (p.c() < z_end) {
+            low_rundist_planes_its.push_back(el);
+        }
+    }
+
+    return true;
+}
+
+
+
+
+
+struct face_diff {
+    Face_iterator it_self;
+    Face_iterator it_other;
     double diff = -1;
 
-    double operator()(const norm_center& nc) const {
-        return CGAL::squared_distance(nc.norm1, norm1) + CGAL::squared_distance(nc.center1, center1);
+    double cmp_with(Face_iterator fit) const {
+        Point_3 norm1 = calc_norm(it_self);
+        Point_3 norm2 = calc_norm(fit);
+        Point_3 center1 = calc_centr(it_self);
+        Point_3 center2 = calc_centr(fit);
+        return CGAL::squared_distance(norm1, norm2) + CGAL::squared_distance(center1, center2);
     }
 };
 
@@ -102,24 +194,67 @@ void write_segment_ply(Point_3 p1, Point_3 p2, const std::string& filename) {
     out.close();
 }
 
-Point_3 calc_centr(std::vector<Point_3>& points) {
-    size_t num = points.size();
-    Point_3 center(0, 0, 0);
-    double all_area = 0;
-    for(size_t i = 2; i < num; ++i) {
-        double area = std::fabs(CGAL::squared_area(points[0], points[i-1], points[i]));
-        Point_3 center1 = Point_3((points[0].x() + points[i-1].x() + points[i].x())/3
-                , (points[0].y() + points[i-1].y() + points[i].y())/3
-                , (points[0].z() + points[i-1].z() + points[i].z())/3);
-        center = Point_3(center.x() + center1.x() * area, center.y() + center1.y() * area
-                , center.z() + center1.z() * area);
-        all_area += area;
+
+void usual_compare(std::vector<face_diff>& diffs, std::vector<Face_iterator>& poly1_its, std::vector<Face_iterator>& poly2_its) {
+    for(auto& el: poly1_its) {
+        face_diff fd;
+        fd.it_self = el;
+        diffs.push_back(fd);
     }
-    return Point_3(center.x()/all_area, center.y()/all_area, center.z()/all_area);
+
+    for(auto& el: diffs) {
+        double min_diff = std::numeric_limits<double>::max();
+        double diff = 0;
+        for(auto& el1: poly2_its) {
+            diff = el.cmp_with(el1);
+            if (diff < min_diff) {
+                min_diff = diff;
+                el.diff = min_diff;
+                el.it_other = el1;
+            }
+        }
+    }
+}
+
+void kuhn_compare(std::vector<face_diff>& diffs, std::vector<Face_iterator>& poly1_its, std::vector<Face_iterator>& poly2_its) {
+    Matrix<double> matrix(poly1_its.size(), poly2_its.size());
+    size_t nrows = matrix.rows();
+    size_t ncols = matrix.columns();
+    for(size_t row = 0; row < nrows; ++row) {
+        face_diff fd;
+        fd.it_self = poly1_its[row];
+        for(size_t col = 0; col < ncols; ++col) {
+            matrix(row, col) = fd.cmp_with(poly2_its[col]);
+        }
+    }
+
+	Munkres<double> m;
+	m.solve(matrix);
+
+    for(auto& el: poly1_its) {
+        face_diff fd;
+        fd.it_self = el;
+        diffs.push_back(fd);
+    }
+
+    for(size_t row = 0; row < nrows; ++row) {
+        for(size_t col = 0; col < ncols; ++col) {
+            if(matrix(row, col) == 0) {
+                diffs[row].it_other = poly2_its[col];
+                diffs[row].diff = diffs[row].cmp_with(poly2_its[col]);
+                break;
+            }
+        }
+    }
 }
 
 
+
+
 int main(int argc, char* argv[]) {
+
+    feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW | FE_UNDERFLOW);
+
     std::string type_of_file;
     std::string file1;
     std::string file2;
@@ -149,88 +284,39 @@ int main(int argc, char* argv[]) {
         CGAL::IO::read_OBJ(file1, poly1);
         CGAL::IO::read_OBJ(file2, poly2);
     }
-    std::vector<norm_center> mer1;
+
+    std::vector<Face_iterator> poly1_all_its;
+    std::vector<Face_iterator> poly1_rundits_its;
+    std::vector<Face_iterator> poly1_up_rundist_its;
+    std::vector<Face_iterator> poly1_low_rundist_its;
+
+    std::vector<Face_iterator> poly2_all_its;
+    std::vector<Face_iterator> poly2_rundits_its;
+    std::vector<Face_iterator> poly2_up_rundist_its;
+    std::vector<Face_iterator> poly2_low_rundist_its;
+
+
     for(auto fit = poly1.facets_begin(); fit != poly1.facets_end(); ++fit) {
-        std::vector<Point_3> p;
-        auto begin = boost::make_transform_iterator(fit->facet_begin(), to_point());
-        std::copy_n(begin, fit->size(), std::back_inserter(p));
-        //auto end_ = boost::make_transform_iterator(fit->facet_begin(), to_point());
-        //std::advance(end, fit->size() - 1);
-#if 0
-        Point_3 center(0, 0, 0);
-        size_t amount = fit->size();
-        for(size_t i = 0; i < amount; ++i, ++begin) {
-            center = Point_3(center.x() + (*begin).x(), center.y() + (*begin).y(), center.z() + (*begin).z());
-        }
-        center = Point_3(center.x()/amount, center.y()/amount, center.z()/amount);
-#endif
-    
-        //Point_3 center = CGAL::centroid(p.begin(), p.end());
-        Point_3 center = calc_centr(p);
-        auto h = (*fit).halfedge();
-        Plane plane  = Plane(h->vertex()->point(), h->next()->vertex()->point(), h->next()->next()->vertex()->point());
-        double norm_length = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
-        Point_3 norm = Point_3(plane.a() / norm_length, plane.b() / norm_length, plane.c() / norm_length);
-        mer1.emplace_back(norm, center, fit);
+        poly1_all_its.push_back(fit);
     }
-    std::vector<norm_center> mer2;
     for(auto fit = poly2.facets_begin(); fit != poly2.facets_end(); ++fit) {
-        std::vector<Point_3> p;
-        auto begin = boost::make_transform_iterator(fit->facet_begin(), to_point());
-        std::copy_n(begin, fit->size(), std::back_inserter(p));;
-        //auto end = boost::make_transform_iterator(fit->facet_begin(), to_point());
-        //std::advance(end, fit->size() - 1);
-#if 0
-        Point_3 center(0, 0, 0);
-        size_t amount = fit->size();
-        for(size_t i = 0; i < amount; ++i, ++begin) {
-            center = Point_3(center.x() + (*begin).x(), center.y() + (*begin).y(), center.z() + (*begin).z());
-        }
-        center = Point_3(center.x()/amount, center.y()/amount, center.z()/amount);
-#endif
-   
-        //Point_3 center = CGAL::centroid(p.begin(), p.end());
-        Point_3 center = calc_centr(p);
-        auto h = (*fit).halfedge();
-        Plane plane  = Plane(h->vertex()->point(), h->next()->vertex()->point(), h->next()->next()->vertex()->point());
-        double norm_length = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
-        Point_3 norm = Point_3(plane.a() / norm_length, plane.b() / norm_length, plane.c() / norm_length);
-        mer2.emplace_back(norm, center, fit);
+        poly2_all_its.push_back(fit);
     }
 
-    for(auto& el1: mer1) {
-        double min_diff = std::numeric_limits<double>::max();
-        double diff = 0;
-        for(auto& el2: mer2) {
-            diff = el1(el2);
-            if (diff < min_diff) {
-                min_diff = diff;
-                el1.diff = min_diff;
-                el1.it2 = el2.it1;
-                el1.center2 = el2.center1;
-                el1.norm2 = el2.norm1;
-            }
-        }
-    }
-    std::sort(mer1.begin(), mer1.end(), [](const norm_center& c1, const norm_center& c2) { return c1.diff > c2.diff; });
-    for(auto& el: mer1) {
+    find_rundist_up_low(poly1_all_its, poly1_rundits_its, poly1_up_rundist_its, poly1_low_rundist_its);
+    find_rundist_up_low(poly2_all_its, poly2_rundits_its, poly2_up_rundist_its, poly2_low_rundist_its);
+
+    std::vector<face_diff> diffs;
+    kuhn_compare(diffs, poly1_up_rundist_its, poly2_up_rundist_its);
+
+    std::sort(diffs.begin(), diffs.end(), [](const face_diff& fd1, const face_diff& fd2) { return fd1.diff > fd2.diff; });
+    for(auto& el: diffs) {
         std::cout << el.diff << std::endl;
     }
 
-    for(int i = 0; i < 1; ++i) {
-        write_facet_ply(mer1[i].it1, std::string("face_") + std::to_string(i) + std::string("_1.ply"));
-        write_facet_ply(mer1[i].it2, std::string("face_") + std::to_string(i) + std::string("_2.ply"));
-        //write_point_ply(mer1[i].center1, std::string("centr_") + std::to_string(i) + std::string("_1.ply"));
-        //write_point_ply(mer1[i].center2, std::string("centr_") + std::to_string(i) + std::string("_2.ply"));
-        Point_3 p(mer1[i].center1.x() + mer1[i].norm1.x(), mer1[i].center1.y() + mer1[i].norm1.y()
-                , mer1[i].center1.z() + mer1[i].norm1.z());
-        write_segment_ply(mer1[i].center1, p
-                ,std::string("norm_") + std::to_string(i) + std::string("_1.ply"));
-        Point_3 pp(mer1[i].center2.x() + mer1[i].norm2.x(), mer1[i].center2.y() + mer1[i].norm2.y()
-                , mer1[i].center2.z() + mer1[i].norm2.z());
-        write_segment_ply(mer1[i].center2, pp
-                ,std::string("norm_") + std::to_string(i) + std::string("_2.ply"));
-
+    for(int i = 0; i < 7; ++i) {
+        write_facet_ply(diffs[i].it_self, std::string("face_") + std::to_string(i) + std::string("_1.ply"));
+        write_facet_ply(diffs[i].it_other, std::string("face_") + std::to_string(i) + std::string("_2.ply"));
     }
 
    
