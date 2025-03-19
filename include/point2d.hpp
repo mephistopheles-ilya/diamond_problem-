@@ -7,19 +7,22 @@ class Point2D {
 public:
     double x = 0;
     double y = 0;
+    int number_in_polyhedron = -1;
 public:
     Point2D() noexcept = default;
-    Point2D(double x, double y) noexcept: x(x), y(y) {}
-    Point2D(const Point2D& other) noexcept: x(other.x), y(other.y) {}
-    Point2D(Point2D&& other) noexcept: x(other.x), y(other.y) {}
+    Point2D(double x, double y, int number_in_polyhedron = -1) noexcept: x(x), y(y), number_in_polyhedron(number_in_polyhedron) {}
+    Point2D(const Point2D& other) noexcept: x(other.x), y(other.y), number_in_polyhedron(other.number_in_polyhedron) {}
+    Point2D(Point2D&& other) noexcept: x(other.x), y(other.y), number_in_polyhedron(other.number_in_polyhedron) {}
     Point2D& operator = (const Point2D& other) & noexcept {
         x = other.x;
         y = other.y;
+        number_in_polyhedron = other.number_in_polyhedron;
         return *this;
     }
     Point2D& operator = (Point2D&& other) & noexcept {
         x = other.x;
         y = other.y;
+        number_in_polyhedron = other.number_in_polyhedron;
         return *this;
     }
     Point2D& operator += (const Point2D& other) & noexcept {

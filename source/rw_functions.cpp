@@ -129,7 +129,6 @@ std::tuple<int, int, int> read_spoil_structures_from_file(std::istream& in
             break;
     }
     std::getline(in, line);
-    int counter = 1;
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> dis_uni_azimuth(-parametr_of_azimuth, parametr_of_azimuth);
@@ -194,7 +193,6 @@ std::tuple<int, int, int> read_spoil_structures_from_file(std::istream& in
         }
         std::getline(in, line);
         std::getline(in, line);
-        ++counter;
     }
 
     CGAL::halfspace_intersection_with_constructions_3(planes.begin(), planes.end(), poly);
@@ -267,9 +265,18 @@ std::tuple<int, int, int> read_structures_from_file(std::istream& in
         std::cout << line << std::endl;
     }
 
-    std::copy_n(std::istream_iterator<Point3D>(in), num_vertices, std::back_inserter(arr_points3d));
+    for(int i = 0; i < num_vertices; ++i) {
+        Point3D point;
+        std::istringstream iss(line);
+        iss >> point.number_in_polyhedron;
+        iss >> point.x >> point.y >> point.z;
+        arr_points3d.push_back(point);
+        std::getline(in, line);
+    }
 
-    for(int i = 0; i < 4; ++i) {
+    //std::copy_n(std::istream_iterator<Point3D>(in), num_vertices, std::back_inserter(arr_points3d));
+
+    for(int i = 0; i < 3; ++i) { // for 4 if std::copy_n
         std::getline(in, line);
         std::cout << line << std::endl;
     }

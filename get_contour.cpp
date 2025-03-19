@@ -33,6 +33,8 @@ int main(int argc, char* argv[]) {
     double sigma;
     std::string type_of_file;
     std::string name_of_con_file;
+    bool file_with_points_numbers;
+    std::string directory_for_points_num;
     boost::program_options::options_description desc("All options");
     desc.add_options()
         ("projections", boost::program_options::value<int>(&projections) -> default_value(30)
@@ -67,6 +69,10 @@ int main(int argc, char* argv[]) {
          -> default_value("angle"), "angle or number in postfix after Contour... or con1, con2 or con3")
         ("name_of_con_file", boost::program_options::value<std::string>(&name_of_con_file)
          -> default_value("con_file"), "name of file if data is saving in con format")
+        ("file_with_points_numbers", boost::program_options::value<bool>(&file_with_points_numbers)
+         -> default_value(true), "write extra file with points numbers in polyhedron")
+        ("directory_for_points_num", boost::program_options::value<std::string>(&directory_for_points_num)
+         -> default_value("init_examples_num"), "name of dirrectory for files with points and their numbers in polyhedron")
         ("help", "produce help message")
         ;
     boost::program_options::variables_map vm;
@@ -81,17 +87,10 @@ int main(int argc, char* argv[]) {
         return 2;
     }
 
-    std::cout << "Command line optiosn: " << std::endl;
-    std::cout << "projections = " << projections << '\n';
-    std::cout << "file = " << file << '\n';
-    std::cout << "method = " << projection_method << std::endl;
-    std::cout << "polyhedron = " << shift_poly3d << std::endl;
-
-
     std::ifstream in(file);
     if(!in.is_open()) {
-        std::cout << "Cannot open or read file " << file << std::endl;
-        throw std::runtime_error("Cannot open or read file\n");
+        std::cerr << "Cannot open or read file " << file << std::endl;
+        return 3;
     }
     in >> std::fixed >> std::setprecision(PRECISION);
 
@@ -183,6 +182,33 @@ int main(int argc, char* argv[]) {
                     return ((p.y - min_y_coord) >= BOTTOM_ERR) || ((p.x - min_x_coord) < EPSILON) ||
                     ((max_x_coord - p.x) < EPSILON); });
         }
+        if (file_with_points_numbers == true) {
+            if (type_of_file == "angle") {
+                std::string angle_in_degrees = std::to_string(step * 180./projections);
+                angle_in_degrees = angle_in_degrees.substr(0, angle_in_degrees.find(".") + 4);
+                auto pos = angle_in_degrees.find(".");
+                std::string zeros;
+                while(pos < 3) {
+                    pos++;
+                    zeros += "0";
+                }
+                angle_in_degrees = zeros + angle_in_degrees;
+                file = directory_for_points_num + std::string("/Contour") + angle_in_degrees + std::string(".txt");
+            } else if (type_of_file == "number") {
+                file = directory_for_points_num + std::string("/Contour") + std::to_string(step) + std::string(".txt");
+            }
+
+            std::ofstream print_res(file);
+            if (!print_res.is_open()) {
+                std::cerr << "problem with opening : " << file << std::endl;
+            }
+            for(auto& p: l) {
+                if (((p.y - min_y_coord) >= BOTTOM_ERR) || ((p.x - min_x_coord) < EPSILON) || ((max_x_coord - p.x) < EPSILON) == true) {
+                    print_res << p.x << ' ' << p.y << ' ' << p.number_in_polyhedron << "\n";
+                }
+            }
+        }
+
     }
     if(type_of_file == "con1" || type_of_file == "con2" || type_of_file == "con3") {
         double pixel = 0;

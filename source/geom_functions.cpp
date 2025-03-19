@@ -245,7 +245,7 @@ void make_projection(double angle, std::vector<Point3D>& arr_points3d
         return Point2D(length * sin_a_b, p.z);
 #endif
 #if 1
-        return Point2D(sin_a * p.x + cos_a * p.y, p.z);
+        return Point2D(sin_a * p.x + cos_a * p.y, p.z, p.number_in_polyhedron);
 #endif
     }; 
     std::ranges::transform(arr_points3d, std::back_inserter(mpoint), func);

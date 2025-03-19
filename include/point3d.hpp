@@ -8,21 +8,24 @@ public:
     double x = 0;
     double y = 0;
     double z = 0;
+    int number_in_polyhedron = -1;
 public:
     Point3D() noexcept = default;
-    Point3D(double x, double y, double z) noexcept: x(x), y(y), z(z) {}
-    Point3D(const Point3D& other) noexcept: x(other.x), y(other.y), z(other.z) {}
-    Point3D(Point3D&& other) noexcept: x(other.x), y(other.y), z(other.z) {}
+    Point3D(double x, double y, double z, int number_in_polyhedron = -1) noexcept: x(x), y(y), z(z), number_in_polyhedron(number_in_polyhedron) {}
+    Point3D(const Point3D& other) noexcept: x(other.x), y(other.y), z(other.z), number_in_polyhedron(other.number_in_polyhedron) {}
+    Point3D(Point3D&& other) noexcept: x(other.x), y(other.y), z(other.z), number_in_polyhedron(other.number_in_polyhedron){}
     Point3D& operator = (const Point3D& other) & noexcept {
         x = other.x;
         y = other.y;
         z = other.z;
+        number_in_polyhedron = other.number_in_polyhedron;
         return *this;
     }
     Point3D& operator = (Point3D&& other) & noexcept {
         x = other.x;
         y = other.y;
         z = other.z;
+        number_in_polyhedron = other.number_in_polyhedron;
         return *this;
     }
     Point3D& operator += (const Point3D& other) & noexcept {
