@@ -1,6 +1,8 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <cmath>
+#include <complex>
 
 #include <boost/program_options.hpp>
 
@@ -11,7 +13,7 @@
 #include <CGAL/Surface_mesh.h>
 #include <CGAL/centroid.h>
 #include <CGAL/squared_distance_3.h>
-
+#include <CGAL/Kernel/global_functions_3.h>
 
 #include <fenv.h>
 
@@ -22,7 +24,23 @@ typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 typedef CGAL::Polyhedron_3<K>                               Polyhedron;
 typedef K::Point_3                                          Point_3;
 typedef K::Plane_3                                          Plane;
+typedef K::Vector_3                                         Vector_3;
 typedef Polyhedron::Face_iterator                           Face_iterator;
+
+
+#define _DTOR_   0.0174532925199432957692         //  PI / 180
+inline double Rad2Deg(double a) { return a / _DTOR_; }
+inline double Deg2Rad(double a) { return a * _DTOR_; }
+
+double Azimuth(const Point_3& v) {
+    double a = std::atan2(v.x(), v.y());
+    return (a >= 0) ? a : a + 2*M_PI;
+}
+
+double Slope(const Point_3 &v) {
+    double d = sqrt(v.x()*v.x() + v.y()*v.y());
+    return std::atan2(v.z(), d);
+}
 
 
 Point_3 calc_centr(Face_iterator fit) {
@@ -39,7 +57,7 @@ Point_3 calc_centr(Face_iterator fit) {
         p2 = h->vertex()->point();
         h = h->next();
         double area = std::fabs(CGAL::squared_area(p0, p1, p2));
-        Point_3 center1 = Point_3((p0.x() + p1.x() + p1.x())/3, (p0.y() + p1.y() + p2.y())/3, (p0.z() + p1.z() + p2.z())/3);
+        Point_3 center1 = Point_3((p0.x() + p1.x() + p2.x())/3, (p0.y() + p1.y() + p2.y())/3, (p0.z() + p1.z() + p2.z())/3);
         center = Point_3(center.x() + center1.x() * area, center.y() + center1.y() * area
                 , center.z() + center1.z() * area);
         all_area += area;
@@ -49,11 +67,72 @@ Point_3 calc_centr(Face_iterator fit) {
 }
 
 Point_3 calc_norm(Face_iterator fit) {
+    static std::vector<Point_3> points(100);
+
+    if (fit->size() > points.capacity()) {
+        points.resize(fit->size());
+    }
+    points.clear();
+
     auto h = (*fit).halfedge();
-    Plane plane  = Plane(h->vertex()->point(), h->next()->vertex()->point(), h->next()->next()->vertex()->point());
-    double norm_length = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
-    Point_3 norm = Point_3(plane.a() / norm_length, plane.b() / norm_length, plane.c() / norm_length);
-    return norm;
+    size_t pn = fit->size();
+    size_t i = 0;
+    for(; i < pn; ++i, h = h->next()) {
+        points.push_back(h->vertex()->point());
+    }
+
+    Vector_3 unit_normal(0, 0, 0);
+
+    Point_3 a(0, 0, 0);
+    Point_3 b(0, 0, 0);
+    Point_3 c(0, 0, 0);
+
+    double max_dist = -1;
+    double current_dist = -1;
+    size_t index_a = 0;
+    size_t index_b = 0;
+    for(i = 0; i < pn - 1; ++i) {
+        current_dist = CGAL::squared_distance(points[i], points[i + 1]);
+        if (current_dist > max_dist) {
+            a = points[i];
+            b = points[i + 1];
+            index_a = i;
+            index_b = i + 1;
+            max_dist = current_dist;
+        }
+    }
+    current_dist = CGAL::squared_distance(points[pn - 1], points[0]);
+    if (current_dist > max_dist) {
+        a = points[pn - 1];
+        b = points[0];
+        index_a = pn - 1;
+        index_b = 0;
+    }
+
+    max_dist = -1;
+    K::Line_3 line(a, b);
+
+    for(i = 0; i < pn; ++i) {
+        if (i == index_a || i == index_b) {
+            continue;
+        }
+        current_dist = CGAL::squared_distance(points[i], line);
+        if (current_dist > max_dist) {
+            c = points[i];
+            max_dist = current_dist;
+        }
+    }
+
+    unit_normal = CGAL::unit_normal(a, b, c);
+
+    Point_3 centr = CGAL::centroid(a, b, c);
+    Vector_3 v_centr = Vector_3(Point_3(0, 0, 0), centr);
+    double prod = CGAL::scalar_product(v_centr, unit_normal);
+    if (prod < 0) {
+        unit_normal = -unit_normal;
+    }
+
+    return Point_3(unit_normal.x(), unit_normal.y(), unit_normal.z());
 }
 
 Plane calc_unit_plane(Face_iterator fit) {
@@ -71,7 +150,7 @@ bool find_rundist_up_low(std::vector<Face_iterator>& planes_its
         , std::vector<Face_iterator>& up_rundist_planes_its
         , std::vector<Face_iterator>& low_rundist_planes_its
         ) {
-    std::sort(planes_its.begin(), planes_its.end(), [](Face_iterator fit1, Face_iterator fit2) { 
+    std::sort(planes_its.begin(), planes_its.end(), [](Face_iterator fit1, Face_iterator fit2) {
             Plane p1 = calc_unit_plane(fit1);
             Plane p2 = calc_unit_plane(fit2);
             return p1.c() > p2.c();});
@@ -121,7 +200,10 @@ bool find_rundist_up_low(std::vector<Face_iterator>& planes_its
 struct face_diff {
     Face_iterator it_self;
     Face_iterator it_other;
-    double diff = -1;
+    double diff_2 = -1;
+    double diff_slope = -1;
+    double diff_azimuth = -1;
+    double matched = false;
 
     double cmp_with(Face_iterator fit) const {
         Point_3 norm1 = calc_norm(it_self);
@@ -130,13 +212,35 @@ struct face_diff {
         Point_3 center2 = calc_centr(fit);
         return CGAL::squared_distance(norm1, norm2) + CGAL::squared_distance(center1, center2);
     }
+    double cmp_normal_2(Face_iterator fit) const {
+        Point_3 norm1 = calc_norm(it_self);
+        Point_3 norm2 = calc_norm(fit);
+        return CGAL::squared_distance(norm1, norm2);
+    }
+    double cmp_normal_azimuth(Face_iterator fit) const {
+        Point_3 norm1 = calc_norm(it_self);
+        Point_3 norm2 = calc_norm(fit);
+        double azimuth1 = Azimuth(norm1);
+        double azimuth2 = Azimuth(norm2);
+        double d = std::fabs(azimuth1 - azimuth2);
+        return Rad2Deg(d);
+    }
+    double cmp_normal_slope(Face_iterator fit) const {
+        Point_3 norm1 = calc_norm(it_self);
+        Point_3 norm2 = calc_norm(fit);
+        double slope1 = Slope(norm1);
+        double slope2 = Slope(norm2);
+        double d = std::fabs(slope1 - slope2);
+        return Rad2Deg(d);
+    }
+
 };
 
 void write_facet_ply(Polyhedron::Facet_iterator fit, const std::string& filename) {
     std::ofstream out(filename);
     out << "ply" << std::endl;
     out << "format ascii 1.0" << std::endl;
-    out << "element vertex " << fit->size() << std::endl; 
+    out << "element vertex " << fit->size() << std::endl;
     out << "property double x" << std::endl;
     out << "property double y" << std::endl;
     out << "property double z" << std::endl;
@@ -209,7 +313,7 @@ void usual_compare(std::vector<face_diff>& diffs, std::vector<Face_iterator>& po
             diff = el.cmp_with(el1);
             if (diff < min_diff) {
                 min_diff = diff;
-                el.diff = min_diff;
+                el.diff_2 = min_diff;
                 el.it_other = el1;
             }
         }
@@ -228,8 +332,8 @@ void kuhn_compare(std::vector<face_diff>& diffs, std::vector<Face_iterator>& pol
         }
     }
 
-	Munkres<double> m;
-	m.solve(matrix);
+    Munkres<double> m;
+    m.solve(matrix);
 
     for(auto& el: poly1_its) {
         face_diff fd;
@@ -241,13 +345,93 @@ void kuhn_compare(std::vector<face_diff>& diffs, std::vector<Face_iterator>& pol
         for(size_t col = 0; col < ncols; ++col) {
             if(matrix(row, col) == 0) {
                 diffs[row].it_other = poly2_its[col];
-                diffs[row].diff = diffs[row].cmp_with(poly2_its[col]);
+                diffs[row].diff_2 = diffs[row].cmp_normal_2(poly2_its[col]);
+                diffs[row].diff_slope = diffs[row].cmp_normal_slope(poly2_its[col]);
+                diffs[row].diff_azimuth = diffs[row].cmp_normal_azimuth(poly2_its[col]);
+                diffs[row].matched = true;
                 break;
             }
         }
     }
 }
 
+
+bool check_match(const std::vector<face_diff>& diffs) {
+    for(const auto& el: diffs) {
+        if (el.matched == false) {
+            return false;
+        }
+    }
+    return true;
+}
+
+double mean_l2_value(const std::vector<face_diff>& diffs, double face_diff::*diff) {
+    double val = 0;
+    int count = 0;
+    for(const auto& el: diffs) {
+        double diff_value = std::invoke(diff, el);
+        if (diff_value >= 0) {
+            ++count;
+            val +=  diff_value * diff_value;
+        }
+    }
+    val /= count;
+    val = std::sqrt(val);
+    return val;
+}
+
+int get_face_number(Polyhedron& poly, Face_iterator it) {
+    int counter = 0;
+    for(auto fit = poly.facets_begin(); fit != poly.facets_end(); ++fit, ++counter) {
+        if (it == fit) {
+            return counter;
+        }
+    }
+    return -1;
+}
+
+void print_results(Polyhedron& poly1, Polyhedron& poly2, std::vector<face_diff>& diffs, std::string part, double face_diff::*diff
+        , std::string file1, std::string file2) {
+    std::sort(diffs.begin(), diffs.end(), [diff](const face_diff& fd1, const face_diff& fd2) { return std::invoke(diff, fd1) 
+            > std::invoke(diff, fd2); });
+
+    if (check_match(diffs) == false) {
+        std::cout << "Not all faces from " << part << " are matched" << std::endl;
+    } else {
+        std::cout << "All faces from " << part << " are matched" << std::endl;
+    }
+    if (diff == &face_diff::diff_azimuth) {
+        std::cout << "Azimuth degrees" << std::endl;
+    }
+    if (diff == &face_diff::diff_slope) {
+        std::cout << "Slope degrees" << std::endl;
+    }
+
+    double mean_value = mean_l2_value(diffs, diff);
+    double max_value = std::invoke(diff, diffs[0]);
+    std::cout << part << " max = " << max_value << std::endl;
+    std::cout << part << " std.dev. = " << mean_value << std::endl;
+
+    std::cout << "Peaks in " << part << std::endl;
+    for(int i = 0; i < 7; ++i) {
+        int num1 = get_face_number(poly1, diffs[i].it_self);
+        int num2 = get_face_number(poly2, diffs[i].it_other);
+        std::cout << "Difference = " << std::invoke(diff, diffs[i]) << " ";
+        std::cout << "for face : ";
+        std::string name1 = file1.substr(file1.find("Reflect"));
+        std::string name2 = file2.substr(file2.find("Reflect"));
+        std::cout << "number = " <<  num1 << ' ' << "in " << name1 << ",  ";
+        std::cout << "number = " <<  num2 << " " << "in " << name2 << ' ';
+        std::cout << std::endl;
+    }
+
+#if 0
+    for(auto& el: diffs) {
+        std::cout << std::invoke(diff, el) << std::endl;
+    }
+    std::cout << std::endl;
+#endif
+}
 
 
 
@@ -306,20 +490,101 @@ int main(int argc, char* argv[]) {
     find_rundist_up_low(poly1_all_its, poly1_rundits_its, poly1_up_rundist_its, poly1_low_rundist_its);
     find_rundist_up_low(poly2_all_its, poly2_rundits_its, poly2_up_rundist_its, poly2_low_rundist_its);
 
-    std::vector<face_diff> diffs;
-    kuhn_compare(diffs, poly1_up_rundist_its, poly2_up_rundist_its);
+    std::vector<face_diff> diffs_up_rundist;
+    kuhn_compare(diffs_up_rundist, poly1_up_rundist_its, poly2_up_rundist_its);
 
-    std::sort(diffs.begin(), diffs.end(), [](const face_diff& fd1, const face_diff& fd2) { return fd1.diff > fd2.diff; });
-    for(auto& el: diffs) {
+    std::vector<face_diff> diffs_low_rundist;
+    kuhn_compare(diffs_low_rundist, poly1_low_rundist_its, poly2_low_rundist_its);
+
+
+    print_results(poly1, poly2, diffs_up_rundist, "pavilion", &face_diff::diff_azimuth, file1, file2);
+    print_results(poly1, poly2, diffs_up_rundist, "pavilion", &face_diff::diff_slope, file1, file2);
+    print_results(poly1, poly2, diffs_low_rundist, "crown", &face_diff::diff_azimuth, file1, file2);
+    print_results(poly1, poly2, diffs_low_rundist, "crown", &face_diff::diff_slope, file1, file2);
+
+#if 0
+    std::sort(diffs_up_rundist.begin(), diffs_up_rundist.end(), [](const face_diff& fd1, const face_diff& fd2) { return fd1.diff > fd2.diff; });
+    std::sort(diffs_low_rundist.begin(), diffs_low_rundist.end(), [](const face_diff& fd1, const face_diff& fd2) { return fd1.diff > fd2.diff; });
+
+    if (check_match(diffs_up_rundist) == false) {
+        std::cout << "Not all faces from pavilion are matched" << std::endl;
+    } else {
+        std::cout << "All faces from pavilion are matched" << std::endl;
+    }
+    double up_mean_value = mean_l2_value(diffs_up_rundist);
+    double up_max_value = diffs_up_rundist[0].diff;
+    std::cout << "Pavilion max difference = " << up_max_value << std::endl;
+    std::cout << "Pavilion mean difference = " << up_mean_value << std::endl;
+
+    std::cout << "Max differences in pavilion : " << std::endl;
+    for(int i = 0; i < 7; ++i) {
+        int num1 = get_face_number(poly1, diffs_up_rundist[i].it_self);
+        int num2 = get_face_number(poly2, diffs_up_rundist[i].it_other);
+        std::cout << "Difference = " << diffs_up_rundist[i].diff << " ";
+        std::cout << "for face : ";
+        std::string name1 = file1.substr(file1.find("Reflect"));
+        std::string name2 = file2.substr(file2.find("Reflect"));
+        std::cout << "number = " <<  num1 << ' ' << "in " << name1 << ",  ";
+        std::cout << "number = " <<  num2 << " " << "in " << name2 << ' ';
+        std::cout << std::endl;
+    }
+
+    for(auto& el: diffs_up_rundist) {
+        std::cout << el.diff << std::endl;
+    }
+    std::cout << std::endl;
+
+    if (check_match(diffs_low_rundist) == false) {
+        std::cout << "Not all faces from crown are matched" << std::endl;
+    } else {
+        std::cout << "All faces from crown are matched" << std::endl;
+    }
+    double low_mean_value = mean_l2_value(diffs_low_rundist);
+    double low_max_value = diffs_low_rundist[0].diff;
+    std::cout << "Crown max difference = " << low_max_value << std::endl;
+    std::cout << "Crown mean difference = " << low_mean_value << std::endl;
+
+    std::cout << "Max differences in crown : " << std::endl;
+    for(int i = 0; i < 7; ++i) {
+        int num1 = get_face_number(poly1, diffs_low_rundist[i].it_self);
+        int num2 = get_face_number(poly2, diffs_low_rundist[i].it_other);
+        std::cout << "Difference = " << diffs_low_rundist[i].diff << " ";
+        std::cout << "for face : ";
+        std::string name1 = file1.substr(file1.find("Reflect"));
+        std::string name2 = file2.substr(file2.find("Reflect"));
+        std::cout << "number = " <<  num1 << ' ' << "in " << name1 << ",  ";
+        std::cout << "number = " <<  num2 << " " << "in " << name2 << ' ';
+        std::cout << std::endl;
+    }
+    for(auto& el: diffs_low_rundist) {
         std::cout << el.diff << std::endl;
     }
 
-    for(int i = 0; i < 7; ++i) {
-        write_facet_ply(diffs[i].it_self, std::string("face_") + std::to_string(i) + std::string("_1.ply"));
-        write_facet_ply(diffs[i].it_other, std::string("face_") + std::to_string(i) + std::string("_2.ply"));
+#endif
+    for(int i = 0; i < 0; ++i) {
+        write_facet_ply(diffs_up_rundist[i].it_self, std::string("face_") + std::to_string(i) + std::string("_1.ply"));
+        write_facet_ply(diffs_up_rundist[i].it_other, std::string("face_") + std::to_string(i) + std::string("_2.ply"));
+#if 0
+        Point_3 norm1 = calc_norm(diffs_up_rundist[i].it_self);
+        Point_3 norm2 = calc_norm(diffs_up_rundist[i].it_other);
+        face_diff fd;
+        fd.it_self = diffs_up_rundist[i].it_self;
+        std::cout << "????   " << fd.cmp_normal_azimuth(diffs_up_rundist[i].it_other) << std::endl;
+        Point_3 center1 = calc_centr(diffs_up_rundist[i].it_self);
+        Point_3 center2 = calc_centr(diffs_up_rundist[i].it_other);
+
+
+        Point_3 p(center1.x() + norm1.x(), center1.y() + norm1.y(), center1.z() + norm1.z());
+        write_segment_ply(center1, p ,std::string("norm_") + std::to_string(i) + std::string("_1.ply"));
+
+        Point_3 pp(center2.x() + norm2.x(), center2.y() + norm2.y(), center2.z() + norm2.z());
+
+        write_segment_ply(center2, pp, std::string("norm_") + std::to_string(i) + std::string("_2.ply"));
+#endif
     }
 
-   
+
+
     return 0;
 }
 
