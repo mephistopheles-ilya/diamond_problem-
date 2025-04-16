@@ -2,7 +2,6 @@
 #include <vector>
 #include <algorithm>
 #include <cmath>
-#include <complex>
 
 #include <boost/program_options.hpp>
 
@@ -14,6 +13,8 @@
 #include <CGAL/centroid.h>
 #include <CGAL/squared_distance_3.h>
 #include <CGAL/Kernel/global_functions_3.h>
+#include <CGAL/linear_least_squares_fitting_3.h>
+#include <boost/property_map/vector_property_map.hpp>
 
 #include <fenv.h>
 
@@ -66,6 +67,38 @@ Point_3 calc_centr(Face_iterator fit) {
     return Point_3(center.x()/all_area, center.y()/all_area, center.z()/all_area);
 }
 
+
+#if 0
+Point_3 calc_norm(Face_iterator fit) {
+    static std::vector<Point_3> points(100);
+
+    if (fit->size() > points.capacity()) {
+        points.resize(fit->size());
+    }
+    points.clear();
+
+    auto h = (*fit).halfedge();
+    size_t pn = fit->size();
+    size_t i = 0;
+    for(; i < pn; ++i, h = h->next()) {
+        points.push_back(h->vertex()->point());
+    }
+    Plane best_plane;
+    Point_3 centroid;
+
+    CGAL::linear_least_squares_fitting_3( points.begin(), points.end(), best_plane, centroid, CGAL::Dimension_tag<0>());
+    Vector_3 unit_normal = best_plane.orthogonal_vector();
+    Vector_3 oriented_normal = Plane(points[0], points[1], points[3]).orthogonal_vector();
+    double prod = CGAL::scalar_product(unit_normal, oriented_normal);
+    if (prod < 0) {
+        unit_normal = unit_normal * (-1);
+    }
+    unit_normal = unit_normal / unit_normal.squared_length();
+    return Point_3(unit_normal.x(), unit_normal.y(), unit_normal.z());
+}
+#endif
+
+#if 1
 Point_3 calc_norm(Face_iterator fit) {
     static std::vector<Point_3> points(100);
 
@@ -134,6 +167,7 @@ Point_3 calc_norm(Face_iterator fit) {
 
     return Point_3(unit_normal.x(), unit_normal.y(), unit_normal.z());
 }
+#endif
 
 Plane calc_unit_plane(Face_iterator fit) {
     auto h = (*fit).halfedge();
@@ -220,6 +254,9 @@ struct face_diff {
     double cmp_normal_azimuth(Face_iterator fit) const {
         Point_3 norm1 = calc_norm(it_self);
         Point_3 norm2 = calc_norm(fit);
+        if (norm1.x() < 1e-6 || norm1.y() < 1e-6 || norm2.x() < 1e-6 || norm2.y() < 1e-6) {
+            return 0;
+        }
         double azimuth1 = Azimuth(norm1);
         double azimuth2 = Azimuth(norm2);
         double d = std::fabs(azimuth1 - azimuth2);
@@ -379,6 +416,34 @@ double mean_l2_value(const std::vector<face_diff>& diffs, double face_diff::*dif
     val = std::sqrt(val);
     return val;
 }
+double mean_value(const std::vector<face_diff>& diffs, double face_diff::*diff) {
+    double val = 0;
+    int count = 0;
+    for(const auto& el: diffs) {
+        double diff_value = std::invoke(diff, el);
+        if (diff_value >= 0) {
+            ++count;
+            val += diff_value;
+        }
+    }
+    val /= count;
+    return val;
+}
+
+double std_deviation(const std::vector<face_diff>& diffs, double mean_val, double face_diff::*diff) {
+    double val = 0;
+    int count = 0;
+    for(const auto& el: diffs) {
+        double diff_value = std::invoke(diff, el);
+        if (diff_value >= 0) {
+            ++count;
+            val += (diff_value - mean_val) * (diff_value - mean_val);
+        }
+    }
+    val /= (count - 1);
+    return std::sqrt(val);
+}
+
 
 int get_face_number(Polyhedron& poly, Face_iterator it) {
     int counter = 0;
@@ -394,7 +459,9 @@ void print_results(Polyhedron& poly1, Polyhedron& poly2, std::vector<face_diff>&
         , std::string file1, std::string file2) {
     std::sort(diffs.begin(), diffs.end(), [diff](const face_diff& fd1, const face_diff& fd2) { return std::invoke(diff, fd1) 
             > std::invoke(diff, fd2); });
-
+    std::string name1 = file1.substr(file1.find("Reflect"));
+    std::string name2 = file2.substr(file2.find("Reflect"));
+    std::cout << name1 << " /  " << name2 << std::endl;
     if (check_match(diffs) == false) {
         std::cout << "Not all faces from " << part << " are matched" << std::endl;
     } else {
@@ -406,24 +473,26 @@ void print_results(Polyhedron& poly1, Polyhedron& poly2, std::vector<face_diff>&
     if (diff == &face_diff::diff_slope) {
         std::cout << "Slope degrees" << std::endl;
     }
+    if (diff == &face_diff::diff_2) {
+        std::cout << "Distance in microns" << std::endl;
+    }
 
-    double mean_value = mean_l2_value(diffs, diff);
-    double max_value = std::invoke(diff, diffs[0]);
-    std::cout << part << " max = " << max_value << std::endl;
-    std::cout << part << " std.dev. = " << mean_value << std::endl;
+    double mean = mean_value(diffs, diff);
+    double max = std::invoke(diff, diffs[0]);
+    double std_dev = std_deviation(diffs, mean, diff);
+    std::cout << part << " max = " << max << std::endl;
+    std::cout << part << " mean = " << mean << std::endl;
+    std::cout << part << " std.dev. = " << std_dev << std::endl;
 
     std::cout << "Peaks in " << part << std::endl;
     for(int i = 0; i < 7; ++i) {
         int num1 = get_face_number(poly1, diffs[i].it_self);
         int num2 = get_face_number(poly2, diffs[i].it_other);
-        std::cout << "Difference = " << std::invoke(diff, diffs[i]) << " ";
+        std::cout << "Diff= " << std::invoke(diff, diffs[i]) << " ";
         std::cout << "for face : ";
-        std::string name1 = file1.substr(file1.find("Reflect"));
-        std::string name2 = file2.substr(file2.find("Reflect"));
-        std::cout << "number = " <<  num1 << ' ' << "in " << name1 << ",  ";
-        std::cout << "number = " <<  num2 << " " << "in " << name2 << ' ';
-        std::cout << std::endl;
+        std::cout << num1 << " / " << num2 << std::endl;
     }
+    std::cout << std::endl;
 
 #if 0
     for(auto& el: diffs) {
@@ -499,8 +568,11 @@ int main(int argc, char* argv[]) {
 
     print_results(poly1, poly2, diffs_up_rundist, "pavilion", &face_diff::diff_azimuth, file1, file2);
     print_results(poly1, poly2, diffs_up_rundist, "pavilion", &face_diff::diff_slope, file1, file2);
+    print_results(poly1, poly2, diffs_up_rundist, "pavilion", &face_diff::diff_2, file1, file2);
     print_results(poly1, poly2, diffs_low_rundist, "crown", &face_diff::diff_azimuth, file1, file2);
     print_results(poly1, poly2, diffs_low_rundist, "crown", &face_diff::diff_slope, file1, file2);
+    print_results(poly1, poly2, diffs_low_rundist, "crown", &face_diff::diff_2, file1, file2);
+
 
 #if 0
     std::sort(diffs_up_rundist.begin(), diffs_up_rundist.end(), [](const face_diff& fd1, const face_diff& fd2) { return fd1.diff > fd2.diff; });
@@ -561,15 +633,15 @@ int main(int argc, char* argv[]) {
     }
 
 #endif
-    for(int i = 0; i < 0; ++i) {
+    for(int i = 0; i < 1; ++i) {
         write_facet_ply(diffs_up_rundist[i].it_self, std::string("face_") + std::to_string(i) + std::string("_1.ply"));
         write_facet_ply(diffs_up_rundist[i].it_other, std::string("face_") + std::to_string(i) + std::string("_2.ply"));
-#if 0
+#if 1
         Point_3 norm1 = calc_norm(diffs_up_rundist[i].it_self);
         Point_3 norm2 = calc_norm(diffs_up_rundist[i].it_other);
         face_diff fd;
         fd.it_self = diffs_up_rundist[i].it_self;
-        std::cout << "????   " << fd.cmp_normal_azimuth(diffs_up_rundist[i].it_other) << std::endl;
+        std::cout << "????   " << fd.cmp_normal_slope(diffs_up_rundist[i].it_other) << std::endl;
         Point_3 center1 = calc_centr(diffs_up_rundist[i].it_self);
         Point_3 center2 = calc_centr(diffs_up_rundist[i].it_other);
 
