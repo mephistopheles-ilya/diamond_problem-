@@ -4,7 +4,6 @@ project (diamond_problem VERSION 1.0.0)
 
 file(GLOB SRCS "source/*.cpp")
 
-
 # static library
 add_library(libgeom STATIC ${SRCS})
 

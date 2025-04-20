@@ -1,6 +1,8 @@
 import subprocess
 import os
 import time
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 
 """
 models = ["Reflect_00001", "Reflect_10001", "Reflect_20001", "Reflect_30002"
@@ -14,50 +16,94 @@ for model in models:
 """
 
 
-folder_path = '/home/ilya/Downloads/unzipping'
+folder_path = '/home/ilya/Downloads/unzipping6'
+model_name = "Reflect_60001"
 
-distance_data = []
+angle_data = []
 slope_data = []
 azimuth_data = []
 
 t1 = time.time()
 for filename in os.listdir(folder_path):
-    file1 = "ChangedModels/Reflect_20001.obj"
     file_path = os.path.join(folder_path, filename)
+    filename = filename[0:filename.rfind("_")] + ".obj";
+    file1 = "new_ChangedModels/" + filename
+    print(filename)
     p = subprocess.run(f'./cmp_poly.out --type_of_file=obj --file1={file1} --file2={file_path}', capture_output=True, text=True, shell=True)
     ps = p.stdout.split("\n\n")
+    print(p.stderr)
     for ans in ps:
-        if "Distance" in ans:
-            distance_data.append(ans)
+        if "Angle" in ans:
+            angle_data.append(ans)
         elif "Slope" in ans:
             slope_data.append(ans)
         elif "Azimuth" in ans:
             azimuth_data.append(ans)
+
 t2 = time.time()
 print("Time :", t2 - t1)
 
-t1 = time.time()
-distance_data.sort(key=lambda line: float(line.split("\n")[3].split(" ")[3]), reverse=True)
-slope_data.sort(key=lambda line: float(line.split("\n")[3].split(" ")[3]), reverse=True)
-azimuth_data.sort(key=lambda line: float(line.split("\n")[3].split(" ")[3]), reverse=True)
-t2 = time.time()
-print("Time :", t2 - t1)
+angle_values = [float(data.split("\n")[5].split(" ")[3]) for data in angle_data]
+slope_values = [float(data.split("\n")[5].split(" ")[3]) for data in slope_data]
+azimuth_values = [float(data.split("\n")[5].split(" ")[3]) for data in azimuth_data]
 
-print(distance_data[0].split("\n")[3].split(" ")[3])
-print(slope_data[0].split("\n")[3].split(" ")[3])
-print(slope_data[0].split("\n")[3].split(" ")[3])
+edges = [int(data.split("\n")[2].split(" ")[2]) for data in angle_data]
+faces = [int(data.split("\n")[3].split(" ")[2]) for data in slope_data]
 
-with open("Reflect_20001_distance_log.txt", encoding="utf8", mode="w") as f:
-    for line in distance_data:
+
+with PdfPages(model_name + '_compare.pdf') as pdf:
+    plt.figure(figsize=(10, 5))
+
+    x_values = range(len(angle_values))
+
+    plt.plot(x_values, angle_values, label='Angle in degrees', linewidth=1, color="green")
+    plt.plot(x_values, slope_values, label='Slope in degrees', linewidth=1, color="red")
+    plt.plot(x_values, azimuth_values, label='Azimuth in degrees', linewidth=1, color="blue")
+
+    plt.title(model_name)
+    plt.xlabel('number in log file')
+    plt.ylabel('degrees')
+
+    plt.xticks(range(0, len(angle_values), 5), fontsize=4, rotation=90)
+
+    plt.legend()
+    pdf.savefig(bbox_inches='tight')
+    plt.close()
+
+    plt.figure(figsize=(10, 5))
+    
+    plt.plot(x_values, edges, label="Edges", linewidth=1, color="blue")
+    plt.plot(x_values, faces, label="Faces", linewidth=1, color="red")
+    
+    plt.title(model_name)
+    plt.xlabel('number in log file (angle)')
+    plt.ylabel('initial - rebuild')
+    
+    plt.xticks(range(0, len(angle_values), 5), fontsize=4, rotation=90)
+
+    plt.legend()
+    pdf.savefig(bbox_inches='tight')  
+    plt.close()
+
+with open(model_name + "_angle_log.txt", encoding="utf8", mode="w") as f:
+    number = 0
+    for line in angle_data:
+        print("NUMBER =", number, file=f)
         print(line, end="\n\n", file=f)
+        number += 1
 
-with open("Reflect_20001_slope_log.txt", encoding="utf8", mode="w") as f:
+with open(model_name + "_slope_log.txt", encoding="utf8", mode="w") as f:
+    number = 0
     for line in slope_data:
+        print("NUMBER =", number, file=f)
         print(line, end="\n\n", file=f)
+        number += 1
 
-with open("Reflect_20001_azimuth_log.txt", encoding="utf8", mode="w") as f:
+with open(model_name + "_azimuth_log.txt", encoding="utf8", mode="w") as f:
+    number = 0
     for line in azimuth_data:
+        print("NUMBER =", number, file=f)
         print(line, end="\n\n", file=f)
-
+        number += 1
 
 
