@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <unordered_set>
+#include <numbers>
 
 #include <boost/program_options.hpp>
 
@@ -315,6 +316,7 @@ struct face_diff {
         return CGAL::squared_distance(norm1, norm2);
     }
     double cmp_normal_azimuth(Face_iterator fit) const {
+        const double pi = std::numbers::pi;
         Point_3 norm1 = calc_norm(it_self);
         Point_3 norm2 = calc_norm(fit);
         //std::cout << norm1.x() << ' ' << norm1.y() << ' ' << norm1.z() << std::endl;
@@ -325,7 +327,10 @@ struct face_diff {
         double azimuth1 = Azimuth(norm1);
         double azimuth2 = Azimuth(norm2);
         //printf("%lf %lf\n", Rad2Deg(azimuth1), Rad2Deg(azimuth2));
-        double d = azimuth1 - azimuth2;
+        double d = std::fabs(azimuth1 - azimuth2);
+        if (2 * pi - d < d) {
+            d = 2 * pi - d;
+        }
         //if (d < 0) {
         //    std::cout << "Les than zero" << std::endl;
         //}
@@ -336,7 +341,7 @@ struct face_diff {
         Point_3 norm2 = calc_norm(fit);
         double slope1 = Slope(norm1);
         double slope2 = Slope(norm2);
-        double d = slope1 - slope2;
+        double d = std::fabs(slope1 - slope2);
         return Rad2Deg(d);
     }
     double cmp_angle(Face_iterator fit) const {
