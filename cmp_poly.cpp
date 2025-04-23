@@ -159,12 +159,19 @@ Point_3 calc_norm(Face_iterator fit) {
 
     unit_normal = CGAL::unit_normal(a, b, c);
 
-    Point_3 centr = CGAL::centroid(a, b, c);
-    Vector_3 v_centr = Vector_3(Point_3(0, 0, 0), centr);
-    double prod = CGAL::scalar_product(v_centr, unit_normal);
+    //Point_3 centr = CGAL::centroid(a, b, c);
+    //Vector_3 v_centr = Vector_3(Point_3(0, 0, 0), centr);
+    //double prod = CGAL::scalar_product(v_centr, unit_normal);
+#if 0
+    Plane plane = Plane(points[0], points[1], points[2]);
+    double norm_length = std::sqrt(plane.a() * plane.a() + plane.b() * plane.b() + plane.c() * plane.c());
+    Plane norm_plane = Plane(plane.a() / norm_length, plane.b() / norm_length, plane.c() / norm_length, plane.d() / norm_length);
+    Vector_3 unit_v = Vector_3(norm_plane.a(), norm_plane.b(), norm_plane.c());
+    double prod = CGAL::scalar_product(unit_v, unit_normal);
     if (prod < 0) {
         unit_normal = -unit_normal;
     }
+#endif
 
     return Point_3(unit_normal.x(), unit_normal.y(), unit_normal.z());
 }
@@ -310,13 +317,18 @@ struct face_diff {
     double cmp_normal_azimuth(Face_iterator fit) const {
         Point_3 norm1 = calc_norm(it_self);
         Point_3 norm2 = calc_norm(fit);
-        //std::cout << norm1.x() << norm1.y() << norm2.x() << norm2.y() << std::endl;
+        //std::cout << norm1.x() << ' ' << norm1.y() << ' ' << norm1.z() << std::endl;
+        //std::cout << norm2.x() << ' ' << norm2.y() << ' ' << norm2.z() << std::endl;
         if (std::fabs(norm1.x()) < 1e-2 || std::fabs(norm1.y()) < 1e-2 || std::fabs(norm2.x()) < 1e-2 || std::fabs(norm2.y()) < 1e-2) {
             return 0;
         }
         double azimuth1 = Azimuth(norm1);
         double azimuth2 = Azimuth(norm2);
+        //printf("%lf %lf\n", Rad2Deg(azimuth1), Rad2Deg(azimuth2));
         double d = azimuth1 - azimuth2;
+        //if (d < 0) {
+        //    std::cout << "Les than zero" << std::endl;
+        //}
         return Rad2Deg(d);
     }
     double cmp_normal_slope(Face_iterator fit) const {
@@ -687,25 +699,36 @@ int main(int argc, char* argv[]) {
     std::vector<face_diff> diffs_low_rundist;
     kuhn_compare(diffs_low_rundist, poly1_low_rundist_its, poly2_low_rundist_its);
 
-
+#if 1
     print_results(poly1, poly2, diffs_up_rundist, "pavilion", &face_diff::diff_azimuth, file1, file2
             , edges_in_poly1_up_rundist - edges_in_poly2_up_rundist
             , static_cast<int>(poly1_up_rundist_its.size()) - static_cast<int>(poly2_up_rundist_its.size()));
+#endif
+#if 1
     print_results(poly1, poly2, diffs_up_rundist, "pavilion", &face_diff::diff_slope, file1, file2
             , edges_in_poly1_up_rundist - edges_in_poly2_up_rundist
             , static_cast<int>(poly1_up_rundist_its.size()) - static_cast<int>(poly2_up_rundist_its.size()));
+#endif
+#if 1
     print_results(poly1, poly2, diffs_up_rundist, "pavilion", &face_diff::diff_angle, file1, file2
             , edges_in_poly1_up_rundist - edges_in_poly2_up_rundist
             , static_cast<int>(poly1_up_rundist_its.size()) - static_cast<int>(poly2_up_rundist_its.size()));
+#endif
+#if 1
     print_results(poly1, poly2, diffs_low_rundist, "crown", &face_diff::diff_azimuth, file1, file2
             , edges_in_poly1_low_rundist - edges_in_poly2_low_rundist
             , static_cast<int>(poly1_low_rundist_its.size()) - static_cast<int>(poly2_low_rundist_its.size()));
+#endif
+#if 1
     print_results(poly1, poly2, diffs_low_rundist, "crown", &face_diff::diff_slope, file1, file2
             , edges_in_poly1_low_rundist - edges_in_poly2_low_rundist
             , static_cast<int>(poly1_low_rundist_its.size()) - static_cast<int>(poly2_low_rundist_its.size()));
+#endif
+#if 1
     print_results(poly1, poly2, diffs_low_rundist, "crown", &face_diff::diff_angle, file1, file2
             , edges_in_poly1_low_rundist - edges_in_poly2_low_rundist
             , static_cast<int>(poly1_low_rundist_its.size()) - static_cast<int>(poly2_low_rundist_its.size()));
+#endif
 
 
 
@@ -769,7 +792,7 @@ int main(int argc, char* argv[]) {
 
 #endif
 #define part diffs_low_rundist
-    for(int i = 0; i < 0 ; ++i) {
+    for(int i = 0; i < 0; ++i) {
         write_facet_ply(part[i].it_self, std::string("face_") + std::to_string(i) + std::string("_1.ply"));
         write_facet_ply(part[i].it_other, std::string("face_") + std::to_string(i) + std::string("_2.ply"));
 #if 1
@@ -777,7 +800,7 @@ int main(int argc, char* argv[]) {
         Point_3 norm2 = calc_norm(part[i].it_other);
         face_diff fd;
         fd.it_self = part[i].it_self;
-        std::cout << "????   " << fd.cmp_normal_slope(part[i].it_other) << std::endl;
+        std::cout << "????   " << fd.cmp_angle(part[i].it_other) << std::endl;
         Point_3 center1 = calc_centr(part[i].it_self);
         Point_3 center2 = calc_centr(part[i].it_other);
 
