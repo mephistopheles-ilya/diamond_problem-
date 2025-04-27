@@ -29,7 +29,8 @@ typedef K::Point_3                                          Point_3;
 typedef K::Plane_3                                          Plane;
 typedef K::Vector_3                                         Vector_3;
 typedef Polyhedron::Face_iterator                           Face_iterator;
-
+typedef Polyhedron::Vertex_handle                           Vertex_handle;
+typedef Polyhedron::HalfedgeDS                              HalfedgeDS;
 
 #define _DTOR_   0.0174532925199432957692         //  PI / 180
 inline double Rad2Deg(double a) { return a / _DTOR_; }
@@ -43,6 +44,67 @@ double Azimuth(const Point_3& v) {
 double Slope(const Point_3 &v) {
     double d = sqrt(v.x()*v.x() + v.y()*v.y());
     return std::atan2(v.z(), d);
+}
+
+
+template <class HDS>
+class Build_polyhedron : public CGAL::Modifier_base<HDS> {
+public:
+    std::vector<Face_iterator> faces;
+    Build_polyhedron() {}
+
+
+    void add_face(const std::vector<Face_iterator>& all_faces, size_t begin, size_t end) {
+        for(size_t i = begin; i < end; ++i) {
+            faces.push_back(all_faces[i]);
+        }
+    }
+    void operator()( HDS& hds) {
+        CGAL::Polyhedron_incremental_builder_3<HDS> B( hds, true);
+        std::unordered_map<Vertex_handle, size_t> vertices;
+        size_t vertex_index = 0;
+        for(auto& face: faces) {
+            auto begin = face->facet_begin();
+            size_t num = face->size();
+            for(size_t i = 0; i < num; ++i, ++begin) {
+                auto insert = vertices.insert({begin->vertex(), vertex_index}).second;
+                if (insert == true) {
+                    ++vertex_index;
+                }
+            }
+        }
+        B.begin_surface(vertices.size(), faces.size(), vertices.size(), 1);
+        std::vector<std::pair<Vertex_handle, size_t>> v;
+        std::copy(vertices.begin(), vertices.end(), std::back_inserter(v));
+        std::sort(v.begin(), v.end(), [](const std::pair<Vertex_handle, size_t>& a
+                    , const std::pair<Vertex_handle, size_t>& b) { return a.second < b.second;});
+        for(const auto& el: v) {
+            B.add_vertex(el.first->point());
+        }
+        for(auto& face: faces) {
+            B.begin_facet();
+            auto begin = face->facet_begin();
+            size_t num = face->size();
+            for(size_t i = 0; i < num; ++i, ++begin) {
+                B.add_vertex_to_facet(vertices.find(begin->vertex())->second);
+            }
+            B.end_facet();
+        }
+        B.end_surface();
+    }
+};
+
+void print_faces_as_polyhedron_ply(std::vector<Face_iterator>& all_faces, size_t begin, size_t end, std::string filename
+        , double precison = 12.) {
+    //std::cout << "HERE " << all_faces.size()  << ' ' << filename << std::endl;
+    Polyhedron polyhedron;
+    Build_polyhedron<HalfedgeDS> build_poly;
+    build_poly.add_face(all_faces, begin, end);
+    polyhedron.delegate(build_poly);
+
+    std::ofstream of(filename);
+    of << std::fixed << std::setprecision(precison);
+    CGAL::IO::write_PLY(of, polyhedron);
 }
 
 
@@ -652,12 +714,12 @@ int main(int argc, char* argv[]) {
     }
 
     std::vector<Face_iterator> poly1_all_its;
-    std::vector<Face_iterator> poly1_rundits_its;
+    std::vector<Face_iterator> poly1_rundist_its;
     std::vector<Face_iterator> poly1_up_rundist_its;
     std::vector<Face_iterator> poly1_low_rundist_its;
 
     std::vector<Face_iterator> poly2_all_its;
-    std::vector<Face_iterator> poly2_rundits_its;
+    std::vector<Face_iterator> poly2_rundist_its;
     std::vector<Face_iterator> poly2_up_rundist_its;
     std::vector<Face_iterator> poly2_low_rundist_its;
 
@@ -669,9 +731,9 @@ int main(int argc, char* argv[]) {
         poly2_all_its.push_back(fit);
     }
 
-    find_rundist_up_low(poly1_all_its, poly1_rundits_its, poly1_up_rundist_its, poly1_low_rundist_its);
+    find_rundist_up_low(poly1_all_its, poly1_rundist_its, poly1_up_rundist_its, poly1_low_rundist_its);
     std::unordered_set<Polyhedron::Vertex_handle> rundist_vertices_poly1;
-    for(auto& el: poly1_rundits_its) {
+    for(auto& el: poly1_rundist_its) {
         auto begin = el->facet_begin();
         size_t sz = el->size();
         for(size_t i = 0; i < sz; ++i, ++begin) {
@@ -683,9 +745,9 @@ int main(int argc, char* argv[]) {
     edges_in_poly1_up_rundist = calculate_num_of_edges(poly1_up_rundist_its, rundist_vertices_poly1);
     edges_in_poly1_low_rundist = calculate_num_of_edges(poly1_low_rundist_its, rundist_vertices_poly1);
 
-    find_rundist_up_low(poly2_all_its, poly2_rundits_its, poly2_up_rundist_its, poly2_low_rundist_its);
+    find_rundist_up_low(poly2_all_its, poly2_rundist_its, poly2_up_rundist_its, poly2_low_rundist_its);
     std::unordered_set<Polyhedron::Vertex_handle> rundist_vertices_poly2;
-    for(auto& el: poly2_rundits_its) {
+    for(auto& el: poly2_rundist_its) {
         auto begin = el->facet_begin();
         size_t sz = el->size();
         for(size_t i = 0; i < sz; ++i, ++begin) {
@@ -697,6 +759,14 @@ int main(int argc, char* argv[]) {
     edges_in_poly2_up_rundist = calculate_num_of_edges(poly2_up_rundist_its, rundist_vertices_poly2);
     edges_in_poly2_low_rundist = calculate_num_of_edges(poly2_low_rundist_its, rundist_vertices_poly2);
 
+    print_faces_as_polyhedron_ply(poly1_rundist_its, 0, poly1_rundist_its.size(), file1.substr(file1.find("Reflect")) + std::string("_rundist.ply"));
+    print_faces_as_polyhedron_ply(poly1_up_rundist_its, 0, poly1_up_rundist_its.size(), file1.substr(file1.find("Reflect")) + std::string("_up_rundist.ply"));
+    print_faces_as_polyhedron_ply(poly1_low_rundist_its, 0, poly1_low_rundist_its.size(), file1.substr(file1.find("Reflect")) + std::string("_low_rundist.ply"));
+
+    print_faces_as_polyhedron_ply(poly2_rundist_its, 0, poly2_rundist_its.size(), file2.substr(file2.find("Reflect")) + std::string("_rundist.ply"));
+    print_faces_as_polyhedron_ply(poly2_up_rundist_its, 0, poly2_up_rundist_its.size(), file2.substr(file2.find("Reflect")) + std::string("_up_rundist.ply"));
+    print_faces_as_polyhedron_ply(poly2_low_rundist_its, 0, poly2_low_rundist_its.size(), file2.substr(file2.find("Reflect")) + std::string("_low_rundist.ply"));
+
 
     std::vector<face_diff> diffs_up_rundist;
     kuhn_compare(diffs_up_rundist, poly1_up_rundist_its, poly2_up_rundist_its);
@@ -704,12 +774,12 @@ int main(int argc, char* argv[]) {
     std::vector<face_diff> diffs_low_rundist;
     kuhn_compare(diffs_low_rundist, poly1_low_rundist_its, poly2_low_rundist_its);
 
-#if 1
+#if 0
     print_results(poly1, poly2, diffs_up_rundist, "pavilion", &face_diff::diff_azimuth, file1, file2
             , edges_in_poly1_up_rundist - edges_in_poly2_up_rundist
             , static_cast<int>(poly1_up_rundist_its.size()) - static_cast<int>(poly2_up_rundist_its.size()));
 #endif
-#if 1
+#if 0
     print_results(poly1, poly2, diffs_up_rundist, "pavilion", &face_diff::diff_slope, file1, file2
             , edges_in_poly1_up_rundist - edges_in_poly2_up_rundist
             , static_cast<int>(poly1_up_rundist_its.size()) - static_cast<int>(poly2_up_rundist_its.size()));
@@ -719,17 +789,17 @@ int main(int argc, char* argv[]) {
             , edges_in_poly1_up_rundist - edges_in_poly2_up_rundist
             , static_cast<int>(poly1_up_rundist_its.size()) - static_cast<int>(poly2_up_rundist_its.size()));
 #endif
-#if 1
+#if 0
     print_results(poly1, poly2, diffs_low_rundist, "crown", &face_diff::diff_azimuth, file1, file2
             , edges_in_poly1_low_rundist - edges_in_poly2_low_rundist
             , static_cast<int>(poly1_low_rundist_its.size()) - static_cast<int>(poly2_low_rundist_its.size()));
 #endif
-#if 1
+#if 0
     print_results(poly1, poly2, diffs_low_rundist, "crown", &face_diff::diff_slope, file1, file2
             , edges_in_poly1_low_rundist - edges_in_poly2_low_rundist
             , static_cast<int>(poly1_low_rundist_its.size()) - static_cast<int>(poly2_low_rundist_its.size()));
 #endif
-#if 1
+#if 0
     print_results(poly1, poly2, diffs_low_rundist, "crown", &face_diff::diff_angle, file1, file2
             , edges_in_poly1_low_rundist - edges_in_poly2_low_rundist
             , static_cast<int>(poly1_low_rundist_its.size()) - static_cast<int>(poly2_low_rundist_its.size()));
@@ -796,8 +866,8 @@ int main(int argc, char* argv[]) {
     }
 
 #endif
-#define part diffs_low_rundist
-    for(int i = 0; i < 0; ++i) {
+#define part diffs_up_rundist
+    for(int i = 0; i < 1; ++i) {
         write_facet_ply(part[i].it_self, std::string("face_") + std::to_string(i) + std::string("_1.ply"));
         write_facet_ply(part[i].it_other, std::string("face_") + std::to_string(i) + std::string("_2.ply"));
 #if 1
