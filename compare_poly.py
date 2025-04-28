@@ -4,19 +4,11 @@ import time
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
-"""
-models = ["Reflect_00001", "Reflect_10001", "Reflect_20001", "Reflect_30002"
-         ,"Reflect_50001", "Reflect_60001", "Reflect_70001"]
-
-for model in models:
-    file1 = "ChangedModels/" + model + ".obj"
-    file2 = "/home/ilya/Downloads/Sample21Test/" + model + "reb" + ".obj"
-    p = subprocess.run(f'./cmp_poly.out --type_of_file=obj --file1={file1} --file2={file2}', capture_output=True, text=True, shell=True)
-    print(p.stdout)
-"""
 
 folder_paths = ["unzipping0", "unzipping1", "unzipping2", "unzipping3", "unzipping4",  "unzipping5",  "unzipping6",  "unzipping7"]
 model_names = ["Reflect_00001", "Reflect_10001", "Reflect_20001", "Reflect_30001", "Reflect_40001", "Reflect_50001", "Reflect_60001", "Reflect_70001"] 
+
+max_deviation = 0
 
 for folder_path, model_name in zip(folder_paths, model_names):
     folder_path = '/home/ilya/Downloads/' + folder_path
@@ -48,6 +40,8 @@ for folder_path, model_name in zip(folder_paths, model_names):
     angle_values = [float(data.split("\n")[5].split(" ")[3]) for data in angle_data]
     slope_values = [float(data.split("\n")[5].split(" ")[3]) for data in slope_data]
     azimuth_values = [float(data.split("\n")[5].split(" ")[3]) for data in azimuth_data]
+
+    max_deviation = max(max_deviation, max(angle_values), max(slope_values), max(azimuth_values))
 
     edges = [int(data.split("\n")[2].split(" ")[2]) for data in angle_data]
     faces = [int(data.split("\n")[3].split(" ")[2]) for data in slope_data]
@@ -109,3 +103,4 @@ for folder_path, model_name in zip(folder_paths, model_names):
             number += 1
 
 
+print(f'Max deviation = {max_deviation}')
