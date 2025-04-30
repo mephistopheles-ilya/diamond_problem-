@@ -313,6 +313,12 @@ bool find_rundist_up_low(std::vector<Face_iterator>& planes_its
             Plane p1 = calc_unit_plane(fit1);
             Plane p2 = calc_unit_plane(fit2);
             return p1.c() > p2.c();});
+#if 0
+    for(auto& pit : planes_its) {
+        fprintf(stderr,"%.10lf\n",  calc_norm(pit).z());
+    }
+    std::cerr << std::endl;
+#endif
 
     size_t sz = planes_its.size();
 
@@ -325,6 +331,27 @@ bool find_rundist_up_low(std::vector<Face_iterator>& planes_its
         double gap = p1.c() - p2.c();
         gaps.push_back({i, gap});
     }
+
+    size_t end_of_the_top = 0;
+    for(size_t i = 0; i < sz - 2; ++i) {
+        if (gaps[i + 1].second < gaps[i].second) {
+            end_of_the_top = i;
+            break;
+        }
+    }
+    if (calc_norm(planes_its[end_of_the_top]).z() < 0.9) {
+        end_of_the_top = -1;
+    }
+#if 0
+    static int counter = 0;
+    std::cerr << end_of_the_top << std::endl;
+    std::vector<Face_iterator> top;
+    for(size_t i = 0; i <= end_of_the_top; ++i) {
+        top.push_back(planes_its[i]);
+    }
+    print_faces_as_polyhedron_ply(top, 0, top.size(), std::string("top_") + std::to_string(counter) + std::string(".ply"));
+    ++counter;
+#endif
 
 
     std::sort(gaps.begin(), gaps.end(), [](const std::pair<size_t, double>& l, const std::pair<size_t, double>& r) {
@@ -340,7 +367,8 @@ bool find_rundist_up_low(std::vector<Face_iterator>& planes_its
 
     double z_start = calc_unit_plane(*rundist_planes_its.begin()).c();
     double z_end = calc_unit_plane(*std::prev(rundist_planes_its.end())).c();
-    for(auto& el: planes_its) {
+    for(size_t i = end_of_the_top + 1; i < planes_its.size(); ++i) {
+        auto& el = planes_its[i];
         Plane p = calc_unit_plane(el);
         if (p.c() > z_start) {
             up_rundist_planes_its.push_back(el);
@@ -363,7 +391,7 @@ struct face_diff {
     double diff_slope = -1;
     double diff_azimuth = -1;
     double diff_angle = -1;
-    double matched = false;
+    bool matched = false;
 
     double cmp_with(Face_iterator fit) const {
         Point_3 norm1 = calc_norm(it_self);
@@ -528,7 +556,7 @@ void kuhn_compare(std::vector<face_diff>& diffs, std::vector<Face_iterator>& pol
 
     for(size_t row = 0; row < nrows; ++row) {
         for(size_t col = 0; col < ncols; ++col) {
-            if(matrix(row, col) == 0) {
+            if(std::fabs(matrix(row, col)) < 1e-16) {
                 diffs[row].it_other = poly2_its[col];
                 diffs[row].diff_2 = diffs[row].cmp_normal_2(poly2_its[col]);
                 diffs[row].diff_slope = diffs[row].cmp_normal_slope(poly2_its[col]);
@@ -539,6 +567,14 @@ void kuhn_compare(std::vector<face_diff>& diffs, std::vector<Face_iterator>& pol
             }
         }
     }
+#if 0
+    for(size_t row = 0; row < nrows; ++row) {
+        for(size_t col = 0; col < ncols; ++col) {
+            fprintf(stderr, "%e ", matrix(row, col));
+        }
+        fprintf(stderr, "\n");
+    }
+#endif
 }
 
 
@@ -759,6 +795,7 @@ int main(int argc, char* argv[]) {
     edges_in_poly2_up_rundist = calculate_num_of_edges(poly2_up_rundist_its, rundist_vertices_poly2);
     edges_in_poly2_low_rundist = calculate_num_of_edges(poly2_low_rundist_its, rundist_vertices_poly2);
 
+#if 1
     print_faces_as_polyhedron_ply(poly1_rundist_its, 0, poly1_rundist_its.size(), file1.substr(file1.find("Reflect")) + std::string("_rundist.ply"));
     print_faces_as_polyhedron_ply(poly1_up_rundist_its, 0, poly1_up_rundist_its.size(), file1.substr(file1.find("Reflect")) + std::string("_up_rundist.ply"));
     print_faces_as_polyhedron_ply(poly1_low_rundist_its, 0, poly1_low_rundist_its.size(), file1.substr(file1.find("Reflect")) + std::string("_low_rundist.ply"));
@@ -766,6 +803,7 @@ int main(int argc, char* argv[]) {
     print_faces_as_polyhedron_ply(poly2_rundist_its, 0, poly2_rundist_its.size(), file2.substr(file2.find("Reflect")) + std::string("_rundist.ply"));
     print_faces_as_polyhedron_ply(poly2_up_rundist_its, 0, poly2_up_rundist_its.size(), file2.substr(file2.find("Reflect")) + std::string("_up_rundist.ply"));
     print_faces_as_polyhedron_ply(poly2_low_rundist_its, 0, poly2_low_rundist_its.size(), file2.substr(file2.find("Reflect")) + std::string("_low_rundist.ply"));
+#endif
 
 
     std::vector<face_diff> diffs_up_rundist;
@@ -774,7 +812,7 @@ int main(int argc, char* argv[]) {
     std::vector<face_diff> diffs_low_rundist;
     kuhn_compare(diffs_low_rundist, poly1_low_rundist_its, poly2_low_rundist_its);
 
-#if 0
+#if 1
     print_results(poly1, poly2, diffs_up_rundist, "pavilion", &face_diff::diff_azimuth, file1, file2
             , edges_in_poly1_up_rundist - edges_in_poly2_up_rundist
             , static_cast<int>(poly1_up_rundist_its.size()) - static_cast<int>(poly2_up_rundist_its.size()));
@@ -784,7 +822,7 @@ int main(int argc, char* argv[]) {
             , edges_in_poly1_up_rundist - edges_in_poly2_up_rundist
             , static_cast<int>(poly1_up_rundist_its.size()) - static_cast<int>(poly2_up_rundist_its.size()));
 #endif
-#if 1
+#if 0
     print_results(poly1, poly2, diffs_up_rundist, "pavilion", &face_diff::diff_angle, file1, file2
             , edges_in_poly1_up_rundist - edges_in_poly2_up_rundist
             , static_cast<int>(poly1_up_rundist_its.size()) - static_cast<int>(poly2_up_rundist_its.size()));
@@ -807,67 +845,8 @@ int main(int argc, char* argv[]) {
 
 
 
-#if 0
-    std::sort(diffs_up_rundist.begin(), diffs_up_rundist.end(), [](const face_diff& fd1, const face_diff& fd2) { return fd1.diff > fd2.diff; });
-    std::sort(diffs_low_rundist.begin(), diffs_low_rundist.end(), [](const face_diff& fd1, const face_diff& fd2) { return fd1.diff > fd2.diff; });
-
-    if (check_match(diffs_up_rundist) == false) {
-        std::cout << "Not all faces from pavilion are matched" << std::endl;
-    } else {
-        std::cout << "All faces from pavilion are matched" << std::endl;
-    }
-    double up_mean_value = mean_l2_value(diffs_up_rundist);
-    double up_max_value = diffs_up_rundist[0].diff;
-    std::cout << "Pavilion max difference = " << up_max_value << std::endl;
-    std::cout << "Pavilion mean difference = " << up_mean_value << std::endl;
-
-    std::cout << "Max differences in pavilion : " << std::endl;
-    for(int i = 0; i < 7; ++i) {
-        int num1 = get_face_number(poly1, diffs_up_rundist[i].it_self);
-        int num2 = get_face_number(poly2, diffs_up_rundist[i].it_other);
-        std::cout << "Difference = " << diffs_up_rundist[i].diff << " ";
-        std::cout << "for face : ";
-        std::string name1 = file1.substr(file1.find("Reflect"));
-        std::string name2 = file2.substr(file2.find("Reflect"));
-        std::cout << "number = " <<  num1 << ' ' << "in " << name1 << ",  ";
-        std::cout << "number = " <<  num2 << " " << "in " << name2 << ' ';
-        std::cout << std::endl;
-    }
-
-    for(auto& el: diffs_up_rundist) {
-        std::cout << el.diff << std::endl;
-    }
-    std::cout << std::endl;
-
-    if (check_match(diffs_low_rundist) == false) {
-        std::cout << "Not all faces from crown are matched" << std::endl;
-    } else {
-        std::cout << "All faces from crown are matched" << std::endl;
-    }
-    double low_mean_value = mean_l2_value(diffs_low_rundist);
-    double low_max_value = diffs_low_rundist[0].diff;
-    std::cout << "Crown max difference = " << low_max_value << std::endl;
-    std::cout << "Crown mean difference = " << low_mean_value << std::endl;
-
-    std::cout << "Max differences in crown : " << std::endl;
-    for(int i = 0; i < 7; ++i) {
-        int num1 = get_face_number(poly1, diffs_low_rundist[i].it_self);
-        int num2 = get_face_number(poly2, diffs_low_rundist[i].it_other);
-        std::cout << "Difference = " << diffs_low_rundist[i].diff << " ";
-        std::cout << "for face : ";
-        std::string name1 = file1.substr(file1.find("Reflect"));
-        std::string name2 = file2.substr(file2.find("Reflect"));
-        std::cout << "number = " <<  num1 << ' ' << "in " << name1 << ",  ";
-        std::cout << "number = " <<  num2 << " " << "in " << name2 << ' ';
-        std::cout << std::endl;
-    }
-    for(auto& el: diffs_low_rundist) {
-        std::cout << el.diff << std::endl;
-    }
-
-#endif
 #define part diffs_up_rundist
-    for(int i = 0; i < 1; ++i) {
+    for(int i = 0; i < 2; ++i) {
         write_facet_ply(part[i].it_self, std::string("face_") + std::to_string(i) + std::string("_1.ply"));
         write_facet_ply(part[i].it_other, std::string("face_") + std::to_string(i) + std::string("_2.ply"));
 #if 1
@@ -875,7 +854,7 @@ int main(int argc, char* argv[]) {
         Point_3 norm2 = calc_norm(part[i].it_other);
         face_diff fd;
         fd.it_self = part[i].it_self;
-        std::cout << "????   " << fd.cmp_angle(part[i].it_other) << std::endl;
+        std::cout << "????   " << fd.cmp_normal_azimuth(part[i].it_other) << std::endl;
         Point_3 center1 = calc_centr(part[i].it_self);
         Point_3 center2 = calc_centr(part[i].it_other);
 
