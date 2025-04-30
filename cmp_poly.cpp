@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <iostream>
 #include <vector>
 #include <algorithm>
@@ -35,6 +36,8 @@ typedef Polyhedron::HalfedgeDS                              HalfedgeDS;
 #define _DTOR_   0.0174532925199432957692         //  PI / 180
 inline double Rad2Deg(double a) { return a / _DTOR_; }
 inline double Deg2Rad(double a) { return a * _DTOR_; }
+
+//Example (1, 0, 1), (-1, 0, 1)
 
 double Azimuth(const Point_3& v) {
     double a = std::atan2(v.x(), v.y());
@@ -359,11 +362,28 @@ bool find_rundist_up_low(std::vector<Face_iterator>& planes_its
     if (gaps.size() < 2) {
         return false;
     }
-    size_t begin = std::min(gaps[0].first, gaps[1].first);
-    size_t before_end = std::max(gaps[0].first, gaps[1].first);
+#if 1
+    size_t max_gap1 = 0,  max_gap2 = 0;
+    for(size_t i = 0; i < gaps.size(); ++i) {
+        if (std::fabs(calc_norm(planes_its[gaps[i].first]).z()) < 0.7 || std::fabs(calc_norm(planes_its[gaps[i].first + 1]).z()) < 0.7) {
+            max_gap1 = i;
+            break;
+        }
+    }
+    for(size_t i = max_gap1 + 1; i < gaps.size(); ++i) {
+        if (std::fabs(calc_norm(planes_its[gaps[i].first]).z()) < 0.7 || std::fabs(calc_norm(planes_its[gaps[i].first + 1]).z()) < 0.7) {
+            max_gap2 = i;
+            break;
+        }
+    }
+#endif
+
+    size_t begin = std::min(gaps[max_gap1].first, gaps[max_gap2].first);
+    size_t before_end = std::max(gaps[max_gap1].first, gaps[max_gap2].first);
     ++begin;
     std::copy(planes_its.begin() + begin, planes_its.begin() + before_end + 1, std::back_inserter(rundist_planes_its));
 
+    //std::cout << calc_norm(planes_its[begin]).z() << ' ' << calc_norm(planes_its[before_end]).z() << std::endl;
 
     double z_start = calc_unit_plane(*rundist_planes_its.begin()).c();
     double z_end = calc_unit_plane(*std::prev(rundist_planes_its.end())).c();
@@ -376,6 +396,9 @@ bool find_rundist_up_low(std::vector<Face_iterator>& planes_its
             low_rundist_planes_its.push_back(el);
         }
     }
+    //std::cout << "UP sz = " << up_rundist_planes_its.size() << ' ';
+    //std::cout << "R sz = " << rundist_planes_its.size() << ' ';
+    //std::cout << "LOW sz = " << low_rundist_planes_its.size() << std::endl;
 
     return true;
 }
@@ -611,7 +634,8 @@ double mean_value(const std::vector<face_diff>& diffs, double face_diff::*diff) 
             val += diff_value;
         }
     }
-    val /= std::max(1, count);
+    assert(count > 0 && "Number of elements must be greater tha zero");
+    val /= count;
     return val;
 }
 
@@ -625,7 +649,8 @@ double std_deviation(const std::vector<face_diff>& diffs, double mean_val, doubl
             val += (diff_value - mean_val) * (diff_value - mean_val);
         }
     }
-    val /= std::max(1, count);
+    assert(count > 0 && "Number of elements must be greater tha zero");
+    val /= count;
     return std::sqrt(val);
 }
 
@@ -795,7 +820,7 @@ int main(int argc, char* argv[]) {
     edges_in_poly2_up_rundist = calculate_num_of_edges(poly2_up_rundist_its, rundist_vertices_poly2);
     edges_in_poly2_low_rundist = calculate_num_of_edges(poly2_low_rundist_its, rundist_vertices_poly2);
 
-#if 1
+#if 0
     print_faces_as_polyhedron_ply(poly1_rundist_its, 0, poly1_rundist_its.size(), file1.substr(file1.find("Reflect")) + std::string("_rundist.ply"));
     print_faces_as_polyhedron_ply(poly1_up_rundist_its, 0, poly1_up_rundist_its.size(), file1.substr(file1.find("Reflect")) + std::string("_up_rundist.ply"));
     print_faces_as_polyhedron_ply(poly1_low_rundist_its, 0, poly1_low_rundist_its.size(), file1.substr(file1.find("Reflect")) + std::string("_low_rundist.ply"));
@@ -817,27 +842,27 @@ int main(int argc, char* argv[]) {
             , edges_in_poly1_up_rundist - edges_in_poly2_up_rundist
             , static_cast<int>(poly1_up_rundist_its.size()) - static_cast<int>(poly2_up_rundist_its.size()));
 #endif
-#if 0
+#if 1
     print_results(poly1, poly2, diffs_up_rundist, "pavilion", &face_diff::diff_slope, file1, file2
             , edges_in_poly1_up_rundist - edges_in_poly2_up_rundist
             , static_cast<int>(poly1_up_rundist_its.size()) - static_cast<int>(poly2_up_rundist_its.size()));
 #endif
-#if 0
+#if 1
     print_results(poly1, poly2, diffs_up_rundist, "pavilion", &face_diff::diff_angle, file1, file2
             , edges_in_poly1_up_rundist - edges_in_poly2_up_rundist
             , static_cast<int>(poly1_up_rundist_its.size()) - static_cast<int>(poly2_up_rundist_its.size()));
 #endif
-#if 0
+#if 1
     print_results(poly1, poly2, diffs_low_rundist, "crown", &face_diff::diff_azimuth, file1, file2
             , edges_in_poly1_low_rundist - edges_in_poly2_low_rundist
             , static_cast<int>(poly1_low_rundist_its.size()) - static_cast<int>(poly2_low_rundist_its.size()));
 #endif
-#if 0
+#if 1
     print_results(poly1, poly2, diffs_low_rundist, "crown", &face_diff::diff_slope, file1, file2
             , edges_in_poly1_low_rundist - edges_in_poly2_low_rundist
             , static_cast<int>(poly1_low_rundist_its.size()) - static_cast<int>(poly2_low_rundist_its.size()));
 #endif
-#if 0
+#if 1
     print_results(poly1, poly2, diffs_low_rundist, "crown", &face_diff::diff_angle, file1, file2
             , edges_in_poly1_low_rundist - edges_in_poly2_low_rundist
             , static_cast<int>(poly1_low_rundist_its.size()) - static_cast<int>(poly2_low_rundist_its.size()));
@@ -845,8 +870,8 @@ int main(int argc, char* argv[]) {
 
 
 
-#define part diffs_up_rundist
-    for(int i = 0; i < 2; ++i) {
+#define part diffs_low_rundist
+    for(int i = 0; i < 0; ++i) {
         write_facet_ply(part[i].it_self, std::string("face_") + std::to_string(i) + std::string("_1.ply"));
         write_facet_ply(part[i].it_other, std::string("face_") + std::to_string(i) + std::string("_2.ply"));
 #if 1
@@ -854,7 +879,7 @@ int main(int argc, char* argv[]) {
         Point_3 norm2 = calc_norm(part[i].it_other);
         face_diff fd;
         fd.it_self = part[i].it_self;
-        std::cout << "????   " << fd.cmp_normal_azimuth(part[i].it_other) << std::endl;
+        std::cout << "????   " << fd.cmp_angle(part[i].it_other) << std::endl;
         Point_3 center1 = calc_centr(part[i].it_self);
         Point_3 center2 = calc_centr(part[i].it_other);
 

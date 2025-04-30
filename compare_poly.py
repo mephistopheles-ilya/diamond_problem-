@@ -8,6 +8,9 @@ from matplotlib.backends.backend_pdf import PdfPages
 folder_paths = ["unzipping0", "unzipping1", "unzipping2", "unzipping3", "unzipping4",  "unzipping5",  "unzipping6",  "unzipping7"]
 model_names = ["Reflect_00001", "Reflect_10001", "Reflect_20001", "Reflect_30001", "Reflect_40001", "Reflect_50001", "Reflect_60001", "Reflect_70001"] 
 
+#folder_paths = ["unzipping4"]
+#model_names = ["Reflect_40001"] 
+
 max_deviation = 0
 
 for folder_path, model_name in zip(folder_paths, model_names):
@@ -22,6 +25,8 @@ for folder_path, model_name in zip(folder_paths, model_names):
         file_path = os.path.join(folder_path, filename)
         filename = filename[0:filename.rfind("_")] + ".obj";
         file1 = "new_ChangedModels/" + filename
+        if filename == "Reflect_40001_fcs2a2d2G.obj":
+            continue;
         print(filename)
         p = subprocess.run(f'./cmp_poly.out --type_of_file=obj --file1={file1} --file2={file_path}', capture_output=True, text=True, shell=True)
         ps = p.stdout.split("\n\n")
