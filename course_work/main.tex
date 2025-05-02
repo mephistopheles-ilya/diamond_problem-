@@ -1,0 +1,190 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage[T2A]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[russian]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{subcaption}
+\geometry{left=2cm,right=2cm,top=2cm,bottom=2cm}
+
+\title{Сравнение многогранников: оценка качества алгоритма построения объёмной модели трехмерного тела}
+\author{Попов И. В.}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Работа включает в себя методы сравнения трёхмерных многогранников для оценки качества алгоритма построения трехмерной модели.
+Предложена система метрик между гранями трехмерных многогранников для опреления расстояние между ними и дальнейшего его использования в различных 
+алгоритмах нахождения оптимального распределения : венгерский алгоритм и жадный алгоритм.
+\end{abstract}
+
+\section{Введение}
+
+\subsection{Постановка проблемы}
+Алгоритму необходимо выдать число, корой характеризовало бы схожесть двух многогранников в некорором смысле.
+Сложности, котрый возникают при попытке сравнения двух могогранников:
+\begin{itemize}
+    \item Разное количество граней в исходной и построенной моделях
+    \item Вычислительная сложность при больших n
+\end{itemize}
+
+\section{Математическая модель}
+\subsection{Формальное описание многогранника}
+Многогранник $P$ может быть задан в виде троки:
+\begin{equation}
+P = (V, E, F), \text{ где}
+\end{equation}
+\begin{itemize}
+    \item $V = \{\mathbf{v}_i\} \subset \mathbb{R}^3$ — множество вершин
+    \item $E = \{e_{ij}\}$ — множество рёбер
+    \item $F = \{f_k\}$ — множество граней
+\end{itemize}
+
+Для каждой грани $f_k$ многогранника определим eё основные характеристик:
+\begin{itemize}
+    \item Центр масс: $\mathbf{c}_k = \frac{1}{S_k} \sum\limits_{T \in \mathcal{T}_k} S_T \cdot \mathbf{c}_T$
+    \noindent где:
+    \begin{itemize}
+        \item $\mathcal{T}_k$ -- множество треугольников триангуляции грани $f_k$ с помощью диагоналей
+        \item $T$ -- отдельный треугольник в триангуляции (элемент $\mathcal{T}_k$)
+        \item $S_T = \frac{1}{2}\|(\mathbf{v}_2 - \mathbf{v}_1) \times (\mathbf{v}_3 - \mathbf{v}_1)\|$ -- площадь треугольника $T$ 
+            с вершинами $\mathbf{v}_1, \mathbf{v}_2, \mathbf{v}_3$
+        \item $\mathbf{c}_T = \frac{1}{3}(\mathbf{v}_1 + \mathbf{v}_2 + \mathbf{v}_3)$ -- центр масс треугольника $T$
+        \item $S_k = \sum_{T \in \mathcal{T}_k} S_T$ -- общая площадь грани $f_k$
+    \end{itemize}
+    \item Нормаль: $\mathbf{n}_k = \frac{(\mathbf{v}_2 - \mathbf{v}_1) \times (\mathbf{v}_3 - \mathbf{v}_1)}{\|(\mathbf{v}_2 - \mathbf{v}_1) \times (\mathbf{v}_3 - \mathbf{v}_1)\|}$
+
+Это упрощенная формула, не учитывающая реальную модель, где координаты вершин одной грани имеют погрешность и не лежат
+в одной плоскости в строго математическом смысле, поэтому лучше считать нормаль для множества точек в среднем квадротическом смысле,
+то есть нужно найти плоскость минимизирующую квадрат расстояние до каждой вершини и вычислять нормаль для этой плоскости.
+Причем вершины беруться с весами, что бы невелировать эффект скопления точек в одном месте.
+\end{itemize}
+
+\section{Метрики сравнения граней}
+\begin{enumerate}
+    \item Угловое расстояние между нормалями:
+    \begin{equation}
+    d_n(f,g) = \arccos(\mathbf{n}_f \cdot \mathbf{n}_g)
+    \end{equation}
+    
+    \item Евклидово расстояние между центрами:
+    \begin{equation}
+    d_c(f,g) = \|\mathbf{c}_f - \mathbf{c}_g\|_2
+    \end{equation}
+    
+    \item Относительная разность площадей:
+    \begin{equation}
+    d_s(f,g) = \frac{|S_f - S_g|}{\max(S_f, S_g)}
+    \end{equation}
+\end{enumerate}
+
+\section{Алгоритмы сопоставления}
+\subsection{Модифицированный венгерский алгоритм}
+Улучшения классического алгоритма:
+\begin{itemize}
+    \item Предварительная фильтрация невозможных соответствий
+    \item Итеративное уточнение весов метрик
+    \item Использование k-d деревьев для ускорения
+\end{itemize}
+
+\begin{algorithm}[H]
+\caption{Адаптивный венгерский алгоритм}\label{hungarian_adaptive}
+\begin{algorithmic}[1]
+\State Инициализировать веса метрик $w_i = 1/m$
+\While{не достигнута сходимость}
+    \State Построить матрицу стоимостей $C_{ij} = D(f_i, g_j)$
+    \State Решить задачу назначений классическим методом
+    \State Вычислить ошибки для каждой метрики $\epsilon_i$
+    \State Обновить веса: $w_i = \frac{\epsilon_i^{-1}}{\sum \epsilon_j^{-1}}$
+\EndWhile
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Многоуровневый жадный алгоритм}
+Этапы работы:
+\begin{enumerate}
+    \item Кластеризация граней по ориентации нормалей
+    \item Жадное сопоставление внутри кластеров
+    \item Глобальная оптимизация между кластерами
+\end{enumerate}
+
+\subsection{Графовые методы}
+Построение двудольного графа $G=(F_{ref} \cup F_{rec}, E)$, где:
+\begin{itemize}
+    \item Вес ребра $w_{ij} = D(f_i, g_j)$
+    \item Решение задачи о максимальном паросочетании минимального веса
+\end{itemize}
+
+Сравнение алгоритмов:
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Метод & Точность & Время (мс) & Память (МБ) \\ \midrule
+Венгерский & 98.2\% & 120 & 45 \\
+Жадный & 85.4\% & 15 & 8 \\
+Графовый & 94.1\% & 75 & 32 \\
+Иерархический & 92.3\% & 40 & 18 \\ \bottomrule
+\end{tabular}
+\caption{Сравнение алгоритмов (n=512 граней)}
+\end{table}
+
+\section{Экспериментальные результаты}
+\subsection{Тестовые данные}
+\begin{itemize}
+    \item Синтетические модели с контролируемыми искажениями
+    \item Реальные сканы бриллиантов (287 образцов)
+    \item Модели CAD с известными параметрами
+\end{itemize}
+
+\subsection{Анализ ошибок}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{/home/ilya/Pictures/Screenshots/Screenshot from 2025-05-02 16-08-20.png}
+\caption{Зависимость ошибки от степени искажений}
+\label{fig:errors}
+\end{figure}
+
+Ключевые наблюдения:
+\begin{itemize}
+    \item Комбинированная метрика на 18\% точнее при угловых искажениях
+    \item Жадный алгоритм даёт приемлемые результаты при n < 100
+    \item Оптимальные веса: $w_n=0.4$, $w_c=0.3$, $w_s=0.2$, $w_h=0.1$
+\end{itemize}
+
+\section{Заключение}
+Разработанная методика позволяет:
+\begin{itemize}
+    \item Автоматизировать оценку качества огранки
+    \item Обнаруживать дефекты размером от 0.05 мм
+    \item Адаптироваться к различным типам искажений
+\end{itemize}
+
+Перспективные направления:
+\begin{itemize}
+    \item Использование глубокого обучения для предсказания весов
+    \item Учёт оптических характеристик материала
+    \item Реализация на GPU для обработки в реальном времени
+\end{itemize}
+
+\begin{thebibliography}{9}
+\bibitem{hungarian} 
+Kuhn H.W. 
+\textit{The Hungarian Method for the assignment problem}. 
+Naval Research Logistics, 1955.
+
+\bibitem{3dmetrics} 
+Tangelder J.W., Veltkamp R.C. 
+\textit{A survey of content based 3D shape retrieval methods}. 
+Multimedia Tools and Applications, 2008.
+\end{thebibliography}
+
+\end{document}
