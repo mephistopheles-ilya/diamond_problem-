@@ -11,6 +11,7 @@
 \usepackage{float}
 \usepackage{subcaption}
 \geometry{left=2cm,right=2cm,top=2cm,bottom=2cm}
+\DeclareMathOperator*{\argmin}{arg\,min}
 
 \title{Сравнение многогранников: оценка качества алгоритма построения объёмной модели трехмерного тела}
 \author{Попов И. В.}
@@ -70,23 +71,87 @@ P = (V, E, F), \text{ где}
 
 \section{Метрики сравнения граней}
 \begin{enumerate}
-    \item Угловое расстояние между нормалями:
-    \begin{equation}
-    d_n(f,g) = \arccos(\mathbf{n}_f \cdot \mathbf{n}_g)
-    \end{equation}
-    
-    \item Евклидово расстояние между центрами:
-    \begin{equation}
-    d_c(f,g) = \|\mathbf{c}_f - \mathbf{c}_g\|_2
-    \end{equation}
-    
-    \item Относительная разность площадей:
-    \begin{equation}
-    d_s(f,g) = \frac{|S_f - S_g|}{\max(S_f, S_g)}
-    \end{equation}
+    \item Евклидово расстояние между центрами и евклидовов расстояние между нормалями:
+        \begin{equation}
+            d(f,g) = \alpha \cdot \sqrt{\|\mathbf{c}_f - \mathbf{c}_g\|_2} + \sqrt{\beta \cdot \|\mathbf{n}_f - \mathbf{n}_g\|_2} 
+        \end{equation}
+        \noindent где:
+        \begin{itemize}
+            \item $\alpha, \beta$ - весовые коэффициенты
+            \item $\alpha, \beta \in \mathbb{R}_{>0}$ - множество положительных действительных чисел
+            \item $\|\mathbf{c}_f - \mathbf{c}_g\|_2$ - евклидово расстояние между центрами
+            \item $\|\mathbf{n}_f - \mathbf{n}_g\|_2$ - евклидово расстояние между нормалями
+        \end{itemize}
+
+    \item Метрика на основе симметрической разности проекций
+        Для граней $f$ и $g$ определим метрику сравнения плоскостности:
+        \begin{equation}
+            d(f,g) = \frac{S(A \triangle B)}{S(A) + S(B)}
+        \end{equation}
+        где:
+        \begin{itemize}
+            \item $H_{avg}$ -- усредненная плоскость между гранями
+
+            \item $A = \text{proj}_{H_{avg}}(f)$ -- проекция грани $f$ на $H_{avg}$
+
+            \item $B = \text{proj}_{H_{avg}}(g)$ -- проекция грани $g$ на $H_{avg}$
+
+            \item $A \triangle B = (A \cup B) \setminus (A \cap B)$ -- симметрическая разность проекций
+
+            \item $S(\cdot)$ -- площадь соответствующей проекции
+        \end{itemize}
+
+        Заметим некоторые очевидые свойства этой метрикик:
+        \begin{itemize}
+            \item $d_{sd} \in [0,1]$ (нормирована)
+            \item $d_{sd} = 0$ при полном совпадении проекций
+            \item $d_{sd} = 1$ при нулевом пересечении проекций
+        \end{itemize}
+
+
+    \item Метрика сравнения граней на основе хаусдорфова расстояния:
+        Для двух компактных множеств $A,B \subset \mathbb{R}^2$ хаусдорфово расстояние определяется как:
+        $d_H(A,B) = \max\left\{\sup_{a \in A} \inf_{b \in B} \|a - b\|, \sup_{b \in B} \inf_{a \in A} \|a - b\|\right\}$
+
+        \begin{equation}
+            d(f,g) = d_H(\text{proj}_{H_{avg}}(f), \text{proj}_{H_{avg}}(g))
+        \end{equation}
+
 \end{enumerate}
 
 \section{Алгоритмы сопоставления}
+
+\subsection{Жадный алгоритм}
+Пусть заданы:
+\begin{itemize}
+    \item Многогранник $M_{\text{ref}}$ с гранями $\{f_i\}_{i=1}^n$
+    \item Многогранник $M_{\text{rec}}$ с гранями $\{g_j\}_{j=1}^m$
+    \item Метрика $d(f_i, g_j) \geq 0$ (соответствий тем лучше, чем меньше расстояние)
+\end{itemize}
+
+\subsubsection{Алгоритм}
+\begin{enumerate}
+    \item Инициализировать пустое множество соответствий $\phi = \emptyset$
+    \item Пока есть не сопоставленные грани:
+    \begin{enumerate}
+        \item Для всех пар $(f_i, g_j)$ найти минимальное значение метрики:
+            \[ (f^*, g^*) = \argmin_{f_i \in F_{\text{несоп.}}, g_j \in G_{\text{несоп.}}} d(f_i, g_j) \]
+        \item Добавить соответствие в множество: $\phi \leftarrow \phi \cup \{f^* \leftrightarrow g^*\}$
+        \item Удалить $f^*$ из $F_{\text{несоп.}}$, $g^*$ из $G_{\text{несоп.}}$
+    \end{enumerate}
+    \item Вернуть $\phi$
+\end{enumerate}
+
+Особенности алгоритам:
+\begin{itemize}
+    \item Сложность:\newline
+        Пусть $m >= n$, тогда \newline
+        $\sum\limits_{i = 0}^{m - 1}(m - i) \cdot (n - i) = \sum\limits_{i = 0}^{m - 1}(m \cdot n - i \cdot m 
+        - i \cdot n + i^2) = O(m^2 \cdot n + \frac{1}{6} \cdot m^3)$
+    \item Не гарантирует глобално оптимальное соответствие
+\end{itemize}
+
+
 \subsection{Модифицированный венгерский алгоритм}
 Улучшения классического алгоритма:
 \begin{itemize}
@@ -108,13 +173,7 @@ P = (V, E, F), \text{ где}
 \end{algorithmic}
 \end{algorithm}
 
-\subsection{Многоуровневый жадный алгоритм}
-Этапы работы:
-\begin{enumerate}
-    \item Кластеризация граней по ориентации нормалей
-    \item Жадное сопоставление внутри кластеров
-    \item Глобальная оптимизация между кластерами
-\end{enumerate}
+
 
 \subsection{Графовые методы}
 Построение двудольного графа $G=(F_{ref} \cup F_{rec}, E)$, где:
