@@ -29,6 +29,7 @@ typedef CGAL::Polyhedron_3<K>                               Polyhedron;
 typedef K::Point_3                                          Point_3;
 typedef K::Plane_3                                          Plane;
 typedef K::Vector_3                                         Vector_3;
+typedef K::Segment_3                                        Segment_3;
 typedef Polyhedron::Face_iterator                           Face_iterator;
 typedef Polyhedron::Vertex_handle                           Vertex_handle;
 typedef Polyhedron::HalfedgeDS                              HalfedgeDS;
@@ -167,6 +168,41 @@ Point_3 calc_norm(Face_iterator fit) {
 
 #if 1
 Point_3 calc_norm(Face_iterator fit) {
+    static std::vector<Segment_3> segments(100);
+
+    if (fit->size() > segments.capacity()) {
+        segments.resize(fit->size());
+    }
+    segments.clear();
+
+    auto h = (*fit).halfedge();
+    size_t pn = fit->size();
+    size_t i = 0;
+    for(; i < pn; ++i, h = h->next()) {
+        segments.push_back(Segment_3(h->vertex()->point(), h->next()->vertex()->point()));
+    }
+    Plane plane;
+    CGAL::linear_least_squares_fitting_3(segments.begin(), segments.end(), plane, CGAL::Dimension_tag<1>());
+    Vector_3 v = Vector_3(plane.a(), plane.b(), plane.c());
+    double length = std::sqrt(v.squared_length());
+    v =  v / length;
+    Plane or_plane = Plane(segments[0][0], segments[0][1], segments[1][1]);
+    Vector_3  or_v = Vector_3(or_plane.a(), or_plane.b(), or_plane.c());
+    length = std::sqrt(or_v.squared_length());
+    or_v = or_v /  length;
+    double prod = CGAL::scalar_product(v, or_v);
+    if (prod < 0) {
+        v =  -v;
+    }
+
+    return Point_3(v.x(), v.y(), v.z());
+
+}
+#endif
+
+
+#if 0
+Point_3 calc_norm(Face_iterator fit) {
     static std::vector<Point_3> points(100);
 
     if (fit->size() > points.capacity()) {
@@ -180,6 +216,8 @@ Point_3 calc_norm(Face_iterator fit) {
     for(; i < pn; ++i, h = h->next()) {
         points.push_back(h->vertex()->point());
     }
+    Plane plane;
+    CGAL::linear_least_squares_fitting_3(points.begin(), points.end(), plane, CGAL::Dimension_tag<0>());
 
     Vector_3 unit_normal(0, 0, 0);
 
@@ -243,6 +281,8 @@ Point_3 calc_norm(Face_iterator fit) {
 }
 #endif
 
+
+#if 0
 Plane calc_unit_plane(Face_iterator fit) {
     static std::vector<Point_3> points(100);
 
@@ -304,6 +344,7 @@ Plane calc_unit_plane(Face_iterator fit) {
     Plane norm = Plane(plane.a() / norm_length, plane.b() / norm_length, plane.c() / norm_length, plane.d() / norm_length);
     return norm;
 }
+#endif
 
 
 
@@ -313,9 +354,9 @@ bool find_rundist_up_low(std::vector<Face_iterator>& planes_its
         , std::vector<Face_iterator>& low_rundist_planes_its
         ) {
     std::sort(planes_its.begin(), planes_its.end(), [](Face_iterator fit1, Face_iterator fit2) {
-            Plane p1 = calc_unit_plane(fit1);
-            Plane p2 = calc_unit_plane(fit2);
-            return p1.c() > p2.c();});
+            Point_3 p1 = calc_norm(fit1);
+            Point_3 p2 = calc_norm(fit2);
+            return p1.z() > p2.z();});
 #if 0
     for(auto& pit : planes_its) {
         fprintf(stderr,"%.10lf\n",  calc_norm(pit).z());
@@ -329,9 +370,9 @@ bool find_rundist_up_low(std::vector<Face_iterator>& planes_its
     gaps.reserve(sz - 1);
 
     for(size_t i = 0; i < sz - 1; ++i) {
-        Plane p1 = calc_unit_plane(planes_its[i]);
-        Plane p2 = calc_unit_plane(planes_its[i + 1]);
-        double gap = p1.c() - p2.c();
+        Point_3 p1 = calc_norm(planes_its[i]);
+        Point_3 p2 = calc_norm(planes_its[i + 1]);
+        double gap = p1.z() - p2.z();
         gaps.push_back({i, gap});
     }
 
@@ -385,14 +426,14 @@ bool find_rundist_up_low(std::vector<Face_iterator>& planes_its
 
     //std::cout << calc_norm(planes_its[begin]).z() << ' ' << calc_norm(planes_its[before_end]).z() << std::endl;
 
-    double z_start = calc_unit_plane(*rundist_planes_its.begin()).c();
-    double z_end = calc_unit_plane(*std::prev(rundist_planes_its.end())).c();
+    double z_start = calc_norm(*rundist_planes_its.begin()).z();
+    double z_end = calc_norm(*std::prev(rundist_planes_its.end())).z();
     for(size_t i = end_of_the_top + 1; i < planes_its.size(); ++i) {
         auto& el = planes_its[i];
-        Plane p = calc_unit_plane(el);
-        if (p.c() > z_start) {
+        Point_3 p = calc_norm(el);
+        if (p.z() > z_start) {
             up_rundist_planes_its.push_back(el);
-        } else if (p.c() < z_end) {
+        } else if (p.z() < z_end) {
             low_rundist_planes_its.push_back(el);
         }
     }
@@ -870,7 +911,7 @@ int main(int argc, char* argv[]) {
 
 
 
-#define part diffs_low_rundist
+#define part diffs_up_rundist
     for(int i = 0; i < 0; ++i) {
         write_facet_ply(part[i].it_self, std::string("face_") + std::to_string(i) + std::string("_1.ply"));
         write_facet_ply(part[i].it_other, std::string("face_") + std::to_string(i) + std::string("_2.ply"));
