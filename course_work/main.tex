@@ -1,23 +1,81 @@
-\documentclass[a4paper,12pt]{article}
+\documentclass[a4paper,14pt]{extarticle}
 \usepackage[T2A]{fontenc}
 \usepackage[utf8]{inputenc}
-\usepackage[russian]{babel}
-\usepackage{amsmath,amssymb}
-\usepackage{graphicx}
+\usepackage[english,russian]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{listings}
+\usepackage{hyperref}
+
 \usepackage{algorithm}
 \usepackage{algpseudocode}
-\usepackage{geometry}
 \usepackage{booktabs}
 \usepackage{float}
 \usepackage{subcaption}
-\geometry{left=2cm,right=2cm,top=2cm,bottom=2cm}
+
+\usepackage{xcolor}
+
+\usepackage{indentfirst}
+\usepackage[left = 20mm, right = 10mm, top = 20mm, bottom = 20mm]{geometry}
+\usepackage[indent=1.25cm]{parskip}
+\renewcommand{\baselinestretch}{1.5}
+
+\newtheorem{theorem}{Теорема}
+
+\lstset{label=Листинг, tabsize = 2, basicstyle=\ttfamily, captionpos=b, escapeinside={№}{/№}}
+
 \DeclareMathOperator*{\argmin}{arg\,min}
 
-\title{Сравнение многогранников: оценка качества алгоритма построения объёмной модели трехмерного тела}
-\author{Попов И. В.}
-\date{\today}
+\author{Попов Илья}
 
 \begin{document}
+
+\begin{titlepage}
+    \newpage
+    \begin{center}
+        Московский государственный университет имени M.В. Ломоносова
+        Механико-математический факультет\\
+        Кафедра вычислительной математики \\
+    \end{center}
+
+    \vspace{8em}
+
+    \begin{center}
+        \Large Курсовая работа \\
+    \end{center}
+
+    \vspace{2em}
+
+    \begin{center}
+        \textsc{\textbf{}}
+    \end{center}
+
+    \vspace{20em}
+
+    \newbox{\lbox}
+    \newlength{\maxl}
+    \setlength{\maxl}{\wd\lbox}
+    \hfill\parbox{13cm}{
+        \hspace*{5cm}\hspace*{-5cm}Студент: \qquad\qquad\hbox to \maxl{Попов Илья Викторович\hfill}\\
+        \hspace*{5cm}\hspace*{-5cm}Преподаватель: \hbox to \maxl{Валединский Владимир Дмитриевич}\\
+        \\
+        \hspace*{5cm}\hspace*{-5cm}Группа:\qquad\qquad $\;\:$ \hbox to\maxl{310}\\
+    }
+
+    \vspace{\fill}
+
+    \begin{center}
+        Москва \\2025
+    \end{center}
+
+\end{titlepage}
+\newpage
+
+
+\title{Сравнение многогранников: оценка качества алгоритма построения объёмной модели трехмерного тела}
+\date{\today}
+
 
 \maketitle
 
@@ -207,7 +265,6 @@ P = (V, E, F), \text{ где}
 \subsection{Анализ ошибок}
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.8\textwidth]{/home/ilya/Pictures/Screenshots/Screenshot from 2025-05-02 16-08-20.png}
 \caption{Зависимость ошибки от степени искажений}
 \label{fig:errors}
 \end{figure}
@@ -247,3 +304,4 @@ Multimedia Tools and Applications, 2008.
 \end{thebibliography}
 
 \end{document}
+
