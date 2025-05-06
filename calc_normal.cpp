@@ -2,6 +2,117 @@
 #include <cmath>
 #include <random>
 
+#include <iostream>
+#include <cmath>
+
+using namespace std;
+
+void findMinEigenvector(double a[9], double eigenvector[3]) {
+    const double eps = 1e-12;
+
+    double trace_A = a[0] + a[4] + a[8];
+    
+    double trace_A2 = a[0]*a[0] + a[1]*a[1] + a[2]*a[2] 
+                    + a[3]*a[3] + a[4]*a[4] + a[5]*a[5]
+                    + a[6]*a[6] + a[7]*a[7] + a[8]*a[8];
+    
+    double coefficient_b = (trace_A * trace_A - trace_A2) / 2.0;
+    
+    double det_A = a[0]*(a[4]*a[8] - a[5]*a[5]) 
+                 - a[1]*(a[1]*a[8] - a[5]*a[2]) 
+                 + a[2]*(a[1]*a[5] - a[4]*a[2]);
+    
+    double a_coeff = -trace_A;
+    double b_coeff = coefficient_b;
+    double c_coeff = -det_A;
+    
+    double p = b_coeff - (a_coeff * a_coeff) / 3.0;
+    double q = (2.0 * a_coeff * a_coeff * a_coeff) / 27.0 
+               - (a_coeff * b_coeff) / 3.0 + c_coeff;
+    
+    double lambda[3];
+    if (fabs(p) < eps) {
+        double lambda_single = -a_coeff / 3.0;
+        lambda[0] = lambda[1] = lambda[2] = lambda_single;
+    } else {
+        double denominator = sqrt(-p * p * p / 27.0);
+        double theta = acos(fmin(fmax(-q / (2.0 * denominator), -1.0), 1.0)) / 3.0;
+        double sqrt_neg_p_over3 = sqrt(-p / 3.0);
+        lambda[0] = 2.0 * sqrt_neg_p_over3 * cos(theta) - a_coeff / 3.0;
+        lambda[1] = 2.0 * sqrt_neg_p_over3 * cos(theta + 2.0 * M_PI / 3.0) - a_coeff / 3.0;
+        lambda[2] = 2.0 * sqrt_neg_p_over3 * cos(theta + 4.0 * M_PI / 3.0) - a_coeff / 3.0;
+    }
+    
+    double min_lambda = lambda[0];
+    if (lambda[1] < min_lambda) min_lambda = lambda[1];
+    if (lambda[2] < min_lambda) min_lambda = lambda[2];
+    
+    double m[3][3] = {
+        {a[0] - min_lambda, a[1], a[2]},
+        {a[1], a[4] - min_lambda, a[5]},
+        {a[2], a[5], a[8] - min_lambda}
+    };
+    
+    double v[3];
+    v[0] = m[0][1]*m[1][2] - m[0][2]*m[1][1];
+    v[1] = m[0][2]*m[1][0] - m[0][0]*m[1][2];
+    v[2] = m[0][0]*m[1][1] - m[0][1]*m[1][0];
+    
+    double norm = sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+    
+    if (norm < eps) {
+        v[0] = m[0][1]*m[2][2] - m[0][2]*m[2][1];
+        v[1] = m[0][2]*m[2][0] - m[0][0]*m[2][2];
+        v[2] = m[0][0]*m[2][1] - m[0][1]*m[2][0];
+        norm = sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+    }
+    
+    if (norm < eps) {
+        v[0] = m[1][1]*m[2][2] - m[1][2]*m[2][1];
+        v[1] = m[1][2]*m[2][0] - m[1][0]*m[2][2];
+        v[2] = m[1][0]*m[2][1] - m[1][1]*m[2][0];
+        norm = sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+    }
+    
+    if (norm < eps) {
+        if (fabs(m[0][0]) < eps && fabs(m[1][1]) < eps && fabs(m[2][2]) < eps) {
+            eigenvector[0] = 1.0;
+            eigenvector[1] = eigenvector[2] = 0.0;
+        } else {
+            if (fabs(a[0] - min_lambda) < eps) {
+                eigenvector[0] = 1.0;
+                eigenvector[1] = eigenvector[2] = 0.0;
+            } else if (fabs(a[4] - min_lambda) < eps) {
+                eigenvector[1] = 1.0;
+                eigenvector[0] = eigenvector[2] = 0.0;
+            } else {
+                eigenvector[2] = 1.0;
+                eigenvector[0] = eigenvector[1] = 0.0;
+            }
+        }
+    } else {
+        eigenvector[0] = v[0] / norm;
+        eigenvector[1] = v[1] / norm;
+        eigenvector[2] = v[2] / norm;
+    }
+}
+
+int main() {
+    double a[9] = {
+        4.0, 2.0, 1.0,
+        2.0, 5.0, 3.0,
+        1.0, 3.0, 6.0
+    };
+    
+    double eigenvector[3];
+    findMinEigenvector(a, eigenvector);
+    
+    cout << "Eigenvector: [";
+    cout << eigenvector[0] << ", " << eigenvector[1] << ", " << eigenvector[2] << "]" << endl;
+    
+    return 0;
+}
+
 struct Vector3d {
     double x, y, z;
     Vector3d() : x(0), y(0), z(0) {}
