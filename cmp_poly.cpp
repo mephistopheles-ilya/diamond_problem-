@@ -166,7 +166,7 @@ Point_3 calc_norm(Face_iterator fit) {
 }
 #endif
 
-#if 1
+#if 0
 Point_3 calc_norm(Face_iterator fit) {
     static std::vector<Segment_3> segments(100);
 
@@ -201,7 +201,7 @@ Point_3 calc_norm(Face_iterator fit) {
 #endif
 
 
-#if 0
+#if 1
 Point_3 calc_norm(Face_iterator fit) {
     static std::vector<Point_3> points(100);
 
@@ -861,7 +861,7 @@ int main(int argc, char* argv[]) {
     edges_in_poly2_up_rundist = calculate_num_of_edges(poly2_up_rundist_its, rundist_vertices_poly2);
     edges_in_poly2_low_rundist = calculate_num_of_edges(poly2_low_rundist_its, rundist_vertices_poly2);
 
-#if 0
+#if 1
     print_faces_as_polyhedron_ply(poly1_rundist_its, 0, poly1_rundist_its.size(), file1.substr(file1.find("Reflect")) + std::string("_rundist.ply"));
     print_faces_as_polyhedron_ply(poly1_up_rundist_its, 0, poly1_up_rundist_its.size(), file1.substr(file1.find("Reflect")) + std::string("_up_rundist.ply"));
     print_faces_as_polyhedron_ply(poly1_low_rundist_its, 0, poly1_low_rundist_its.size(), file1.substr(file1.find("Reflect")) + std::string("_low_rundist.ply"));
@@ -878,27 +878,27 @@ int main(int argc, char* argv[]) {
     std::vector<face_diff> diffs_low_rundist;
     kuhn_compare(diffs_low_rundist, poly1_low_rundist_its, poly2_low_rundist_its);
 
-#if 1
+#if 0
     print_results(poly1, poly2, diffs_up_rundist, "pavilion", &face_diff::diff_azimuth, file1, file2
             , edges_in_poly1_up_rundist - edges_in_poly2_up_rundist
             , static_cast<int>(poly1_up_rundist_its.size()) - static_cast<int>(poly2_up_rundist_its.size()));
 #endif
-#if 1
+#if 0
     print_results(poly1, poly2, diffs_up_rundist, "pavilion", &face_diff::diff_slope, file1, file2
             , edges_in_poly1_up_rundist - edges_in_poly2_up_rundist
             , static_cast<int>(poly1_up_rundist_its.size()) - static_cast<int>(poly2_up_rundist_its.size()));
 #endif
-#if 1
+#if 0
     print_results(poly1, poly2, diffs_up_rundist, "pavilion", &face_diff::diff_angle, file1, file2
             , edges_in_poly1_up_rundist - edges_in_poly2_up_rundist
             , static_cast<int>(poly1_up_rundist_its.size()) - static_cast<int>(poly2_up_rundist_its.size()));
 #endif
-#if 1
+#if 0
     print_results(poly1, poly2, diffs_low_rundist, "crown", &face_diff::diff_azimuth, file1, file2
             , edges_in_poly1_low_rundist - edges_in_poly2_low_rundist
             , static_cast<int>(poly1_low_rundist_its.size()) - static_cast<int>(poly2_low_rundist_its.size()));
 #endif
-#if 1
+#if 0
     print_results(poly1, poly2, diffs_low_rundist, "crown", &face_diff::diff_slope, file1, file2
             , edges_in_poly1_low_rundist - edges_in_poly2_low_rundist
             , static_cast<int>(poly1_low_rundist_its.size()) - static_cast<int>(poly2_low_rundist_its.size()));
@@ -911,8 +911,8 @@ int main(int argc, char* argv[]) {
 
 
 
-#define part diffs_up_rundist
-    for(int i = 0; i < 0; ++i) {
+#define part diffs_low_rundist
+    for(int i = 0; i < std::min(7ul, part.size()); ++i) {
         write_facet_ply(part[i].it_self, std::string("face_") + std::to_string(i) + std::string("_1.ply"));
         write_facet_ply(part[i].it_other, std::string("face_") + std::to_string(i) + std::string("_2.ply"));
 #if 1
@@ -921,6 +921,7 @@ int main(int argc, char* argv[]) {
         face_diff fd;
         fd.it_self = part[i].it_self;
         std::cout << "????   " << fd.cmp_angle(part[i].it_other) << std::endl;
+        std::cout << get_face_number(poly1, part[i].it_self) << " / " << get_face_number(poly2, part[i].it_other) << std::endl; 
         Point_3 center1 = calc_centr(part[i].it_self);
         Point_3 center2 = calc_centr(part[i].it_other);
 

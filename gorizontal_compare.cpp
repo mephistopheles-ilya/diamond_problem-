@@ -84,11 +84,13 @@ double compare_contours(line_string& points, line_string& polyline, std::vector<
 #endif
 
 
-double compare_contours(line_string& points, line_string& polyline, std::vector<Segment2D>& segs) {
+double compare_contours(line_string& points, line_string& polyline, std::vector<Segment2D>& segs, double& max_dist, double& z_of_max_dist
+        , double& sum_squared_dists, unsigned& num_dists, std::string cur_name, std::string& max_name){
     double y_max = points[0].y;
     double y_min = std::max(points[0].y, points[points.size() - 1].y);
     for(auto& p: polyline) {
         if(p.y > y_max) y_max = p.y;
+        if(p.y < y_min) y_min = p.y;
     }
 
     line_string line;
@@ -101,18 +103,28 @@ double compare_contours(line_string& points, line_string& polyline, std::vector<
             line.push_back(left);
             line.push_back(right);
             if(boost::geometry::intersection(polyline, line, intersections) == true) {
-                double delta_x = max;
-                Point2D intersection;
-                for(auto p_int: intersections) {
-                    if(std::fabs(p_int.x - p.x) < delta_x) {
-                        delta_x = std::fabs(p_int.x - p.x);
-                        intersection = p_int;
+                if (intersections.size() >= 2) {
+                    double delta_x = max;
+                    Point2D intersection;
+                    for(auto p_int: intersections) {
+                        if(std::fabs(p_int.x - p.x) < delta_x) {
+                            delta_x = std::fabs(p_int.x - p.x);
+                            intersection = p_int;
+                        }
                     }
+                    if (delta_x > max_dist) {
+                        max_dist = delta_x;
+                        z_of_max_dist = p.y;
+                        max_name = cur_name;
+                    }
+                    sum_squared_dists += delta_x * delta_x;
+                    num_dists += 1;
+
+                    error += delta_x;
+                    Segment2D seg{p, intersection};
+                    segs.push_back(seg);
+                    intersections.clear();
                 }
-                error += delta_x;
-                Segment2D seg{p, intersection};
-                segs.push_back(seg);
-                intersections.clear();
             }
             line.clear();
         }
@@ -130,9 +142,22 @@ int main(int argc, char* argv[]) {
         std::cout << "Wrong amount of files" << std::endl;
         return -1;
     }
-    for(int i = 0; i <= amount_of_files; ++i) {
-        std::string contour1 = std::string(argv[1]) + std::string("/contour_") + std::to_string(i);
-        std::string contour2 = std::string(argv[2]) + std::string("/contour_") + std::to_string(i);
+    double max_dist = 0, z_of_max_dist = 0, sum_squared_dists = 0;
+    unsigned num_dists = 0;
+    std::string max_dist_con_name;
+    for(int i = 0; i < amount_of_files; ++i) {
+        std::string angle_in_degrees = std::to_string(i * 180./amount_of_files);
+        angle_in_degrees = angle_in_degrees.substr(0, angle_in_degrees.find(".") + 4);
+        auto pos = angle_in_degrees.find(".");
+        std::string zeros;
+        while(pos < 3) {
+            pos++;
+            zeros += "0";
+        }
+        angle_in_degrees = zeros + angle_in_degrees;
+        std::string contour1 = std::string(argv[1]) + std::string("/Contour") + angle_in_degrees + std::string(".txt");
+        std::string contour2 = std::string(argv[2]) + std::string("/Contour") + angle_in_degrees + std::string(".txt");
+
         std::ifstream in1(contour1);
         std::ifstream in2(contour2);
         std::istream_iterator<Point2D> it1(in1);
@@ -144,8 +169,15 @@ int main(int argc, char* argv[]) {
         assert(("No points in file2", line2.size() > 3));
 
         std::vector<Segment2D> segs;
-        double error = compare_contours(line1, line2, segs);
-        std::cout << error << std::endl;
+        compare_contours(line1, line2, segs, max_dist, z_of_max_dist, sum_squared_dists, num_dists, contour1, max_dist_con_name);
+        segs.clear();
+        compare_contours(line2, line1, segs, max_dist, z_of_max_dist, sum_squared_dists, num_dists, contour1, max_dist_con_name);
+ 
     }
+    double mediana = std::sqrt(sum_squared_dists / num_dists);
+    std::cout << "Max in " << max_dist_con_name << std::endl;
+    std::cout << "Max = " << max_dist << std::endl;
+    std::cout << "z_max = " << z_of_max_dist << std::endl;
+    std::cout << "mediana = " << mediana << std::endl;
     return 0;
 }
