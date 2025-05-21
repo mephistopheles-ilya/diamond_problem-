@@ -260,7 +260,7 @@ std::tuple<int, int, int> read_structures_from_file(std::istream& in
     iss >> num_facets;
     iss >> num_edges;
 
-    for(int i = 0; i < 2; ++i) {
+    for(int i = 0; i < 3; ++i) {
         std::getline(in, line);
         std::cout << line << std::endl;
     }
@@ -276,7 +276,7 @@ std::tuple<int, int, int> read_structures_from_file(std::istream& in
 
     //std::copy_n(std::istream_iterator<Point3D>(in), num_vertices, std::back_inserter(arr_points3d));
 
-    for(int i = 0; i < 3; ++i) { // for 4 if std::copy_n
+    for(int i = 0; i < 2; ++i) { // for 4 if std::copy_n
         std::getline(in, line);
         std::cout << line << std::endl;
     }

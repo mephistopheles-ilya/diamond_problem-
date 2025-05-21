@@ -57,8 +57,6 @@ for folder_path, model_name in zip(folder_paths, model_names):
             ps = [filename] + ps
             print(ps)
             outs.append(ps)
-            if filename == "Reflect_00001_fcpa1d2G.txt" :
-                break
             print("\n\n")
 
     outs.sort(key=lambda strings: float(strings[2].split()[2]), reverse=True)

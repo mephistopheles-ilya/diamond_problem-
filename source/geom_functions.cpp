@@ -280,6 +280,11 @@ void projection_convex_hull(std::vector<Point3D>& arr_points3d
         , boost::geometry::model::polygon<Point2D, false, true, std::vector>& hull, double angle) {
         boost::geometry::model::multi_point<Point2D, std::vector> mpoint;
         make_projection(angle, arr_points3d, mpoint);
+#if 0
+        for(auto& p: mpoint) {
+            std::cerr << p << std::endl;
+        }
+#endif
         boost::geometry::convex_hull(mpoint, hull);
 }
 

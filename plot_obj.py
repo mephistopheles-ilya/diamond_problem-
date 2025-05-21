@@ -39,6 +39,19 @@ import pyvista as pv
 file1 = "/home/ilya/Downloads/unzipping0/Reflect_00001_fcpa1d2G_n.obj"
 file2 = "new_ChangedModels/Reflect_00001_fcpa1d2G.obj"
 
+#file1 = "/home/ilya/Downloads/unzipping7/Reflect_70001_fcps3G_n.obj"
+#file2 = "new_ChangedModels/Reflect_70001_fcps3G.obj"
+
+#file1 = "/home/ilya/Downloads/unzipping7/Reflect_70001_fps3d3G_n.obj"
+#file2 = "new_ChangedModels/Reflect_70001_fps3d3G.obj"
+
+#file1 = "/home/ilya/Downloads/unzipping4/Reflect_40001_fps3a3d3G_n.obj"
+#file2 = "new_ChangedModels/Reflect_40001_fps3a3d3G.obj"
+
+#file1 = "/home/ilya/Downloads/unzipping7/Reflect_70001_fcpa2d2G_n.obj"
+#file2 = "new_ChangedModels/Reflect_70001_fcpa2d2G.obj"
+
+
 mesh1 = pv.read(file1)
 mesh2 = pv.read(file2)
 

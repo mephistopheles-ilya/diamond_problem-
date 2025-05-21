@@ -6,18 +6,11 @@ import time
 #Elapsed : 686.2949342727661 for  1560
 start = time.time()
 
-DIR_OUT = "new_ChangedModels"
+DIR_OUT = "new_new_ChangedModels"
 
 os.makedirs(DIR_OUT, exist_ok=True)
 
-input_files = ["Reflect_00001",
-        "Reflect_10001",
-        "Reflect_20001", 
-        "Reflect_30002",
-        "Reflect_40001",
-        "Reflect_50001",
-        "Reflect_60001",
-        "Reflect_70001"]
+input_files = ["Reflect_30002"]
 
 
 

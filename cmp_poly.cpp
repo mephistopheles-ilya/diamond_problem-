@@ -216,8 +216,8 @@ Point_3 calc_norm(Face_iterator fit) {
     for(; i < pn; ++i, h = h->next()) {
         points.push_back(h->vertex()->point());
     }
-    Plane plane;
-    CGAL::linear_least_squares_fitting_3(points.begin(), points.end(), plane, CGAL::Dimension_tag<0>());
+    //Plane plane;
+    //CGAL::linear_least_squares_fitting_3(points.begin(), points.end(), plane, CGAL::Dimension_tag<0>());
 
     Vector_3 unit_normal(0, 0, 0);
 
